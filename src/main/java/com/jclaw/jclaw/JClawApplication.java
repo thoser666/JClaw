@@ -1,11 +1,12 @@
 package com.jclaw.jclaw;
 
+import org.springframework.ai.autoconfigure.ollama.OllamaAutoConfiguration;
 import org.springframework.ai.autoconfigure.ollama.OllamaConnectionDetails;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.Bean;
 
-@SpringBootApplication
+@SpringBootApplication(exclude = {OllamaAutoConfiguration.class})
 public class JClawApplication {
 
     public static void main(String[] args) {
@@ -14,8 +15,9 @@ public class JClawApplication {
 
     /**
      * Workaround for Spring AI 1.0.0-M1 AOT issue.
-     * Manually defining OllamaConnectionDetails prevents the AOT processor from 
-     * failing on the private PropertiesOllamaConnectionDetails inner class.
+     * Manually defining OllamaConnectionDetails and excluding OllamaAutoConfiguration
+     * prevents the AOT processor from failing on the private PropertiesOllamaConnectionDetails 
+     * inner class while still providing the necessary connection details.
      */
     @Bean
     public OllamaConnectionDetails ollamaConnectionDetails() {
