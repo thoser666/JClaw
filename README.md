@@ -1,66 +1,66 @@
 # JClaw 🐾
 
-**JClaw** ist ein autonomer KI-Agent und ein leistungsstarker Java-Port des bekannten **OpenClaw**-Projekts. Er basiert auf **Spring Boot 3** und ist für die Ausführung als **GraalVM Native Image** optimiert.
+**JClaw** is an autonomous AI agent and a high-performance Java port of the well-known **OpenClaw** project. Built on **Spring Boot 3**, it is optimized for execution as a **GraalVM Native Image**.
 
-JClaw ist kein einfacher Chatbot, sondern ein proaktiver Agent, der Aufgaben plant, ein permanentes Gedächtnis besitzt und lokal via **Ollama** oder über Cloud-Provider operieren kann.
+JClaw is not just a chatbot; it is a proactive agent that plans tasks, maintains long-term memory, and operates either locally via **Ollama** or through various cloud providers.
 
 ## 🚀 Key Features
 
-- **Java-Native Performance:** Dank GraalVM startet JClaw in Millisekunden und verbraucht minimalen Arbeitsspeicher.
-- **Provider-Agnostisch:** Nutzt **Spring AI** zur nahtlosen Integration von **Ollama** (lokal), Anthropic (Claude) oder OpenAI.
-- **Autonomer Loop:** Implementiert das ReAct-Muster für selbstständiges Problemlösen.
-- **Permanentes Gedächtnis:** Speichert Informationen sitzungsübergreifend (Markdown-basiert), genau wie das Original.
-- **Gitflow & CI/CD:** Vollständig integrierte GitHub Actions für automatische Native-Builds.
+- **Java-Native Performance:** Powered by GraalVM, JClaw starts in milliseconds and maintains a minimal memory footprint.
+- **Provider-Agnostic:** Utilizes **Spring AI** for seamless integration with **Ollama** (local), Anthropic (Claude), or OpenAI.
+- **Autonomous Loop:** Implements the ReAct pattern for independent problem-solving.
+- **Persistent Memory:** Saves information across sessions (Markdown-based), staying true to the original concept.
+- **Gitflow & CI/CD:** Fully integrated GitHub Actions for automated native builds.
 
 ## 🛠 Tech Stack
 
 - **Framework:** Spring Boot 3.2+
-- **AI-Orchestration:** Spring AI
+- **AI Orchestration:** Spring AI
 - **Runtime:** GraalVM (JDK 21)
-- **Modell-Integration:** Ollama (Default)
+- **Model Integration:** Ollama (Default)
 
-## 📋 Voraussetzungen
+## 📋 Prerequisites
 
-- **Ollama** (lokal installiert und laufend)
-- **GraalVM JDK 21** (für Native-Builds)
-- **Maven** (oder der beiliegende Wrapper `./mvnw`)
+- **Ollama** (installed and running locally)
+- **GraalVM JDK 21** (required for native builds)
+- **Maven** (or the included wrapper `./mvnw`)
 
-## 🚦 Schnellstart
+## 🚦 Quick Start
 
-1.  **Repository klonen:**
+1.  **Clone the Repository:**
     ```bash
     git clone https://github.com
     cd jclaw
     ```
 
-2.  **Ollama Modell vorbereiten:**
-    Stelle sicher, dass Ollama läuft und lade das Standard-Modell:
+2.  **Prepare Ollama Model:**
+    Ensure Ollama is running and pull the default model:
     ```bash
     ollama pull llama3
     ```
 
-3.  **Anwendung starten:**
+3.  **Run the Application:**
     ```bash
     ./mvnw spring-boot:run
     ```
 
-4.  **Als Native Image kompilieren (Optional):**
+4.  **Compile as Native Image (Optional):**
     ```bash
     ./mvnw -Pnative native:compile
     ./target/jclaw
     ```
 
-## 🏗 Projekt-Struktur & Gitflow
+## 🏗 Project Structure & Gitflow
 
-Dieses Projekt folgt dem **Gitflow-Muster**:
-- `master`: Enthält die stabilen Releases.
-- `develop`: Hier findet die tägliche Entwicklung statt.
-- Feature-Branches werden von `develop` abgezweigt.
+This project follows the **Gitflow pattern**:
+- `master`: Contains stable production releases.
+- `develop`: The primary branch for ongoing development.
+- Feature branches are branched off from `develop`.
 
-## 📄 Lizenz
+## 📄 License
 
-Dieses Projekt ist unter der **MIT-Lizenz** lizenziert – siehe die [LICENSE](LICENSE) Datei für Details.
+This project is licensed under the **MIT License** – see the [LICENSE](LICENSE) file for details.
 
 ## 🤝 Credits
 
-Inspiriert durch das ursprüngliche **OpenClaw**-Projekt (Clawdbot). JClaw bringt die Vision autonomer Agenten in das Java-Ökosystem.
+Inspired by the original **OpenClaw** project (Clawdbot). JClaw brings the vision of autonomous agents to the Java ecosystem.
