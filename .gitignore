@@ -31,3 +31,47 @@ build/
 
 ### VS Code ###
 .vscode/
+
+# --- IDE & System ---
+.idea/
+*.swp
+.DS_Store
+
+# --- Build & Output (Maven/Gradle) ---
+out/
+bin/
+*.class
+*.jar
+*.war
+*.ear
+
+# --- GraalVM / Native Image ---
+# Schließt die nativen Binärdateien und Debug-Symbole aus
+*.exe
+*.dll
+*.so
+*.dylib
+# Native-Image Build-Reports
+reports/
+*.build_artifacts.txt
+
+# --- AI & LLM Specifics ---
+# Lokale KI-Modelle oder Checkpoints (oft sehr groß)
+models/
+*.gguf
+*.bin
+*.onnx
+# Prompt-Logs oder lokale Vektor-Datenbanken
+logs/ai/
+.vector_db/
+
+# --- Environment & Secrets ---
+.env
+.env.local
+token.txt
+*.pem
+
+# --- Dependabot / Package Manager ---
+.terraform/
+node_modules/
+
