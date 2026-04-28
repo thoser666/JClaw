@@ -1,0 +1,21 @@
+version: 2
+updates:
+  # Updates für Maven-Abhängigkeiten (Spring Boot, Spring AI, etc.)
+  - package-ecosystem: "maven"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "java"
+
+  # Updates für GitHub Actions (GraalVM Setup Action, Checkout, etc.)
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    labels:
+      - "dependencies"
+      - "github-actions"
+
