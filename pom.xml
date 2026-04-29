@@ -17,7 +17,7 @@
 
     <properties>
         <java.version>21</java.version>
-        <spring-ai.version>1.0.0-M1</spring-ai.version>
+        <spring-ai.version>2.0.0-M5</spring-ai.version>
     </properties>
 
     <dependencies>
@@ -31,6 +31,7 @@
         <dependency>
             <groupId>org.springframework.ai</groupId>
             <artifactId>spring-ai-ollama-spring-boot-starter</artifactId>
+            <!-- Version is managed by spring-ai-bom, so it should not be explicitly set here -->
         </dependency>
 
         <!-- GraalVM Native Support -->
@@ -59,6 +60,13 @@
         <dependency>
             <groupId>jakarta.websocket</groupId>
             <artifactId>jakarta.websocket-api</artifactId>
+            <version>2.1.1</version>
+        </dependency>
+
+        <!-- Required to avoid NoClassDefFoundError: jakarta/annotation/PostConstruct during AOT -->
+        <dependency>
+            <groupId>jakarta.annotation</groupId>
+            <artifactId>jakarta.annotation-api</artifactId>
             <version>2.1.1</version>
         </dependency>
     </dependencies>
