@@ -37,6 +37,7 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-aop</artifactId>
+            <version>${parent.version}</version> <!-- Explicitly add version -->
         </dependency>
 
         <dependency>
