@@ -37,7 +37,7 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-aop</artifactId>
-            <version>${parent.version}</version> <!-- Explicitly add version -->
+            <version>3.2.4</version>
         </dependency>
 
         <dependency>
@@ -54,10 +54,12 @@
         <dependency>
             <groupId>jakarta.websocket</groupId>
             <artifactId>jakarta.websocket-client-api</artifactId>
+            <version>2.1.1</version>
         </dependency>
         <dependency>
             <groupId>jakarta.websocket</groupId>
             <artifactId>jakarta.websocket-api</artifactId>
+            <version>2.1.1</version>
         </dependency>
     </dependencies>
 
