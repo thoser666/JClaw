@@ -40,5 +40,5 @@ jobs:
       - name: Upload Binary
         uses: actions/upload-artifact@v4
         with:
-          name: jclaw-${{ github.ref_name }}-binary
+          name: jclaw-native-binary
           path: target/jclaw
