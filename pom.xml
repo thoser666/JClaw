@@ -31,7 +31,7 @@
         <dependency>
             <groupId>org.springframework.ai</groupId>
             <artifactId>spring-ai-ollama-spring-boot-starter</artifactId>
-            <!-- Version is managed by spring-ai-bom, so it should not be explicitly set here -->
+            <version>${spring-ai.version}</version> <!-- Explicitly setting version to resolve persistent error -->
         </dependency>
 
         <!-- GraalVM Native Support -->
