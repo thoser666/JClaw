@@ -5,7 +5,7 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>3.2.4</version>
+        <version>3.3.0</version>  <!-- Geändert von 3.2.4 -->
         <relativePath/>
     </parent>
 
@@ -15,18 +15,9 @@
     <name>JClaw</name>
     <description>Java Port of OpenClaw AI Agent</description>
 
-    <developers>
-        <developer/>
-    </developers>
-    <scm>
-        <connection/>
-        <developerConnection/>
-        <tag/>
-        <url/>
-    </scm>
     <properties>
         <java.version>21</java.version>
-        <spring-ai.version>2.0.0.M5</spring-ai.version>
+        <spring-ai.version>1.0.0-M3</spring-ai.version>  <!-- Geändert von 2.0.0.M5 -->
     </properties>
 
     <dependencies>
@@ -40,13 +31,14 @@
         <dependency>
             <groupId>org.springframework.ai</groupId>
             <artifactId>spring-ai-starter-model-ollama</artifactId>
+            <!-- Version wird durch dependencyManagement bereitgestellt -->
         </dependency>
 
         <!-- GraalVM Native Support -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-aop</artifactId>
-            <version>3.2.4</version>
+            <!-- Keine explizite Version nötig - wird vom Parent geerbt -->
         </dependency>
 
         <dependency>
@@ -59,7 +51,7 @@
             <artifactId>spring-boot-starter-actuator</artifactId>
         </dependency>
 
-        <!-- Required to avoid NoClassDefFoundError: jakarta/websocket/Endpoint during AOT -->
+        <!-- Jakarta Dependencies für AOT -->
         <dependency>
             <groupId>jakarta.websocket</groupId>
             <artifactId>jakarta.websocket-client-api</artifactId>
@@ -70,8 +62,6 @@
             <artifactId>jakarta.websocket-api</artifactId>
             <version>2.1.1</version>
         </dependency>
-
-        <!-- Required to avoid NoClassDefFoundError: jakarta/annotation/PostConstruct during AOT -->
         <dependency>
             <groupId>jakarta.annotation</groupId>
             <artifactId>jakarta.annotation-api</artifactId>
@@ -100,11 +90,6 @@
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
-                <configuration>
-                    <image>
-                        <builder>paketobuildpacks/builder-jammy-tiny:latest</builder>
-                    </image>
-                </configuration>
             </plugin>
         </plugins>
     </build>
@@ -118,14 +103,6 @@
                 <enabled>false</enabled>
             </snapshots>
         </repository>
-        <repository>
-            <id>spring-snapshots</id>
-            <name>Spring Snapshots</name>
-            <url>https://repo.spring.io/snapshot</url>
-            <snapshots>
-                <enabled>true</enabled>
-            </snapshots>
-        </repository>
     </repositories>
     <pluginRepositories>
         <pluginRepository>
@@ -134,14 +111,6 @@
             <url>https://repo.spring.io/milestone</url>
             <snapshots>
                 <enabled>false</enabled>
-            </snapshots>
-        </pluginRepository>
-        <pluginRepository>
-            <id>spring-snapshots</id>
-            <name>Spring Snapshots</name>
-            <url>https://repo.spring.io/snapshot</url>
-            <snapshots>
-                <enabled>true</enabled>
             </snapshots>
         </pluginRepository>
     </pluginRepositories>
