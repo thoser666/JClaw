@@ -2,6 +2,9 @@ package com.jclaw.jclaw;
 
 import org.springframework.ai.autoconfigure.ollama.OllamaAutoConfiguration;
 import org.springframework.ai.autoconfigure.ollama.OllamaConnectionDetails;
+import org.springframework.ai.chat.model.ChatModel;
+import org.springframework.ai.ollama.OllamaChatModel;
+import org.springframework.ai.ollama.api.OllamaApi;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.Bean;
@@ -27,5 +30,15 @@ public class JClawApplication {
                 return "http://localhost:11434";
             }
         };
+    }
+
+    @Bean
+    public OllamaApi ollamaApi(OllamaConnectionDetails connectionDetails) {
+        return new OllamaApi(connectionDetails.getBaseUrl());
+    }
+
+    @Bean
+    public ChatModel ollamaChatModel(OllamaApi ollamaApi) {
+        return new OllamaChatModel(ollamaApi);
     }
 }
