@@ -21,28 +21,28 @@ jobs:
         language: [ 'java-kotlin' ]
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+    - name: Checkout repository
+      uses: actions/checkout@v4
 
-      # 1. Zwingend JDK 25 bereitstellen, damit der Compiler die neuen Java-Features versteht
-      - name: Set up JDK 25
-        uses: actions/setup-java@v4
-        with:
-          java-version: '25'
-          distribution: 'temurin'
-          cache: 'maven'
+    # 1. Zwingend JDK 25 bereitstellen, damit der Compiler die neuen Java-Features versteht
+    - name: Set up JDK 25
+      uses: actions/setup-java@v4
+      with:
+        java-version: '25'
+        distribution: 'temurin'
+        cache: 'maven'
 
-      # 2. CodeQL für Java initialisieren
-      - name: Initialize CodeQL
-        uses: github/codeql-action/init@v4
-        with:
-          languages: ${{ matrix.matrix.language }}
+    # 2. CodeQL für Java initialisieren
+    - name: Initialize CodeQL
+      uses: github/codeql-action/init@v4
+      with:
+        languages: ${{ matrix.matrix.language }}
 
-      # 3. Manueller Build statt unzuverlässigem Autobuild
-      - name: Build Java Application
-        run: |
-          mvn clean compile -DskipTests
+    # 3. Manueller Build statt unzuverlässigem Autobuild
+    - name: Build Java Application
+      run: |
+        mvn clean compile -DskipTests
 
-      # 4. Analyse ausführen
-      - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@v4
+    # 4. Analyse ausführen
+    - name: Perform CodeQL Analysis
+      uses: github/codeql-action/analyze@v4
