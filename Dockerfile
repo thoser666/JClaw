@@ -1,0 +1,57 @@
+name: "Build and Push Docker Image"
+
+on:
+  push:
+    branches: [ "master", "develop" ]
+
+# Erlaubt dem GitHub-Runner, Pakete in deiner GitHub Registry zu speichern
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    # Setzt QEMU und Buildx für optimierte Docker-Builds auf
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    # Loggt sich vollautomatisch in die GitHub Container Registry ein
+    - name: Log in to the Container registry
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    # Generiert intelligente Tags basierend auf dem Branch (master -> latest, develop -> develop)
+    - name: Extract metadata (tags, labels) for Docker
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+        tags: |
+          type=ref,event=branch
+          type=raw,value=latest,enable=${{ github.ref == 'refs/heads/master' }}
+
+    # Baut das Image anhand deines Dockerfiles und pusht es in deine GHCR
+    - name: Build and push Docker image
+      uses: docker/build-push-action@v6
+      with:
+        context: .
+        file: ./Dockerfile
+        push: true
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        # Nutzt GitHub-Caching, damit darauffolgende Builds rasend schnell sind
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
