@@ -58,10 +58,11 @@ public class OllamaAiAdapter implements AiProviderPort {
         }
         messages.add(new UserMessage(command.prompt()));
 
-        ChatOptions options = ToolCallingChatOptions.builder()
-                .internalToolExecutionEnabled(false)
-                .toolCallbacks(toolCallbacks)
-                .build();
+        ChatOptions defaultOptions = chatModel.getDefaultOptions();
+        ToolCallingChatOptions.Builder<?> builder = defaultOptions instanceof ToolCallingChatOptions toolCallingOptions
+                ? toolCallingOptions.mutate()
+                : ToolCallingChatOptions.builder().model(defaultOptions.getModel());
+        ChatOptions options = builder.toolCallbacks(toolCallbacks).build();
 
         List<ToolInvocation> toolInvocations = new ArrayList<>();
         Prompt prompt = new Prompt(messages, options);

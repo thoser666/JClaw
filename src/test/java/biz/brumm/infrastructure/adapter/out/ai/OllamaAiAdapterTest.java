@@ -26,6 +26,7 @@ import org.springframework.ai.chat.model.Generation;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.model.tool.ToolCallingManager;
 import org.springframework.ai.model.tool.ToolExecutionResult;
+import org.springframework.ai.ollama.api.OllamaChatOptions;
 
 import java.util.List;
 
@@ -52,6 +53,7 @@ class OllamaAiAdapterTest {
     }
 
     private OllamaAiAdapter adapter(List<AgentTool> tools, ChatMemory memory) {
+        when(chatModel.getDefaultOptions()).thenReturn(OllamaChatOptions.builder().model("qwen3:8b").build());
         return new OllamaAiAdapter(chatModel, toolCallingManager, tools, memory);
     }
 
