@@ -45,6 +45,10 @@ j
 # Log-Dateien
 *.log
 
+# Agent-Memory (IDE-Tools)
+.junie/
+.qodo/
+
 # Betriebssystem-Dateien
 .DS_Store
 Thumbs.db
