@@ -1,20 +1,29 @@
-# Build stage
-FROM maven:3.9-eclipse-temurin-25 AS builder
+# Stage 1: Bauen der Anwendung mit JDK 25
+FROM eclipse-temurin:25-jdk-alpine AS build
+WORKDIR /workspace/app
 
-WORKDIR /app
-
+# Maven Wrapper und POM kopieren für das Caching der Dependencies
+COPY mvnw .
+COPY .mvn .mvn
 COPY pom.xml .
-COPY src ./src
 
-RUN mvn clean package -DskipTests
+# Ausführungsrechte für den Wrapper setzen und Dependencies herunterladen
+RUN chmod +x mvnw
+RUN ./mvnw dependency:go-offline
 
-# Runtime stage
+# Quellcode kopieren und das JAR bauen (ohne Tests)
+COPY src src
+RUN ./mvnw clean package -DskipTests
+
+# Stage 2: Minimales Laufzeit-Image erstellen mit JRE 25
 FROM eclipse-temurin:25-jre-alpine
-
 WORKDIR /app
 
-COPY --from=builder /app/target/*.jar app.jar
+# Das gebaute JAR aus der ersten Stage kopieren
+COPY --from=build /workspace/app/target/jclaw-0.0.1-SNAPSHOT.jar app.jar
 
+# Port des Spring-Boot-Webservers freigeben
 EXPOSE 8080
 
+# Anwendung starten
 ENTRYPOINT ["java", "-jar", "app.jar"]
