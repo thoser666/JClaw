@@ -34,4 +34,16 @@ class ClawAgentServiceTest {
         assertThat(result).isSameAs(expected);
         verify(aiProviderPort).execute(any(AgentCommand.class), contains("JClaw"), eq(8));
     }
+
+    @Test
+    void handleUsesConfiguredMaxIterations() {
+        ClawAgentProperties properties = new ClawAgentProperties(3, 10);
+        ClawAgentService service = new ClawAgentService(aiProviderPort, properties);
+        when(aiProviderPort.execute(any(AgentCommand.class), any(String.class), eq(3)))
+                .thenReturn(AgentResponse.of("Antwort"));
+
+        service.handle(new AgentCommand("Aufgabe", null));
+
+        verify(aiProviderPort).execute(any(AgentCommand.class), any(String.class), eq(3));
+    }
 }

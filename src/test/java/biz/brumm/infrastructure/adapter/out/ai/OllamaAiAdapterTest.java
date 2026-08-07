@@ -115,6 +115,34 @@ class OllamaAiAdapterTest {
     }
 
     @Test
+    void executeRecordsMissingToolResultAsNoResult() {
+        AssistantMessage toolCallMessage = toolCallMessage();
+        when(chatModel.call(any(Prompt.class)))
+                .thenReturn(new ChatResponse(List.of(new Generation(toolCallMessage))))
+                .thenReturn(finalResponse("fertig"));
+
+        ToolExecutionResult executionResult = ToolExecutionResult.builder()
+                .conversationHistory(List.of(
+                        new SystemMessage("System"),
+                        new UserMessage("Frage"),
+                        toolCallMessage,
+                        ToolResponseMessage.builder()
+                                .responses(List.of(new ToolResponseMessage.ToolResponse(
+                                        "call_999", "getCurrentDateTime", "2026-08-06T10:00:00+02:00")))
+                                .build()))
+                .build();
+        when(toolCallingManager.executeToolCalls(any(Prompt.class), any(ChatResponse.class)))
+                .thenReturn(executionResult);
+
+        OllamaAiAdapter adapter = adapter(List.of(new DateTimeTool()));
+
+        AgentResponse response = adapter.execute(new AgentCommand("Frage", null), "System", 5);
+
+        assertThat(response.toolInvocations()).hasSize(1);
+        assertThat(response.toolInvocations().get(0).result()).isEqualTo("kein Ergebnis");
+    }
+
+    @Test
     void executeThrowsWhenIterationLimitIsReached() {
         AssistantMessage toolCallMessage = toolCallMessage();
         when(chatModel.call(any(Prompt.class)))

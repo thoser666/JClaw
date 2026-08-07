@@ -4,6 +4,7 @@ import biz.brumm.domain.model.AgentCommand;
 import biz.brumm.domain.model.AgentResponse;
 import biz.brumm.domain.model.ToolInvocation;
 import biz.brumm.domain.port.in.ExecuteTaskUseCase;
+import biz.brumm.domain.service.AgentLoopLimitExceededException;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
@@ -14,6 +15,7 @@ import java.time.Instant;
 import java.util.List;
 
 import static org.hamcrest.Matchers.hasSize;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -82,5 +84,33 @@ class TaskRestControllerTest {
                         .contentType(APPLICATION_JSON)
                         .content("{ invalid"))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void postWithoutContextIdForwardsNullContext() throws Exception {
+        when(executeTaskUseCase.handle(argThat(command -> command.prompt().equals("Hallo")
+                && command.contextId() == null))).thenReturn(AgentResponse.of("ok"));
+
+        mockMvc.perform(post("/api/v1/tasks")
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {"prompt":"Hallo"}"""))
+                .andExpect(status().isOk());
+
+        verify(executeTaskUseCase).handle(argThat(command -> command.prompt().equals("Hallo")
+                && command.contextId() == null));
+    }
+
+    @Test
+    void postWithLoopLimitExceededReturnsServerError() throws Exception {
+        when(executeTaskUseCase.handle(any(AgentCommand.class)))
+                .thenThrow(new AgentLoopLimitExceededException(8));
+
+        mockMvc.perform(post("/api/v1/tasks")
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {"prompt":"Aufgabe","contextId":"c1"}"""))
+                .andExpect(status().isInternalServerError())
+                .andExpect(jsonPath("$.error").value("Der Agent hat die maximale Anzahl von 8 Iteration(en) überschritten."));
     }
 }

@@ -28,4 +28,10 @@ class CalculatorToolTest {
         assertThat(tool.calculate("1 +")).startsWith("Fehler");
         assertThat(tool.calculate(null)).startsWith("Fehler");
     }
+
+    @Test
+    void errorMessagesExplainTheReason() {
+        assertThat(tool.calculate("10 / 0")).isEqualTo("Fehler: Division durch null.");
+        assertThat(tool.calculate(null)).isEqualTo("Fehler: Der Ausdruck darf nicht leer sein.");
+    }
 }
