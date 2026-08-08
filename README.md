@@ -10,6 +10,7 @@ Die Anwendung ist strikt nach den Prinzipien der **Hexagonalen Architektur** (Po
 * **Spring Boot 4.1.0**
 * **Spring AI 2.0.0**
 * **Ollama** (Default Model: `qwen3:8b`)
+* **H2** (Datei-basierte Datenbank für das Konversations-Memory)
 * **Maven**
 
 ## Architektur-Überblick
@@ -27,7 +28,7 @@ Das Projekt folgt der hexagonalen Struktur unter dem Package-Stamm `biz.brumm`:
 * **Agent-Loop mit Tool-Nutzung:** Das LLM kann in mehreren Iterationen Werkzeuge aufrufen und deren Ergebnisse verarbeiten, bis eine finale Antwort vorliegt oder das Iterationslimit erreicht ist.
   * `CalculatorTool` (`calculate`) – sicherer Rechner mit eigenem, minimalem Ausdrucks-Parser.
   * `DateTimeTool` (`getCurrentDateTime`) – aktuelle Uhrzeit/Datum mit optionaler Zeitzone.
-* **Konversations-Memory:** Über eine optionale `contextId` wird der Gesprächsverlauf (Message-Window mit begrenzter Nachrichtenanzahl) pro Kontext gespeichert und bei Folgeanfragen wieder eingespielt.
+* **Konversations-Memory:** Über eine optionale `contextId` wird der Gesprächsverlauf (Message-Window mit begrenzter Nachrichtenanzahl) pro Kontext gespeichert und bei Folgeanfragen wieder eingespielt. Die Nachrichten werden persistent in einer H2-Datei-Datenbank abgelegt (`./data/jclaw.mv.db`) und überleben so App-Neustarts.
 * **Fehlerbehandlung:** Ein globaler `@RestControllerAdvice` liefert bei ungültigen Anfragen (z. B. leerem Prompt) eine 400-Antwort mit Fehlermeldung.
 
 ## Voraussetzungen
@@ -49,8 +50,22 @@ Einstellungen in `src/main/resources/application.properties`:
 | `spring.ai.ollama.chat.options.temperature` | `0.3` | Sampling-Temperatur |
 | `spring.ai.ollama.chat.options.num-ctx` | `8192` | Kontextfenster (Tokens) |
 | `server.port` | `8080` | HTTP-Port |
+| `spring.datasource.url` | `jdbc:h2:file:./data/jclaw` | JDBC-URL der Memory-Datenbank (Datei-basiert) |
+| `spring.datasource.driver-class-name` | `org.h2.Driver` | JDBC-Treiber |
+| `spring.sql.init.mode` | `always` | Führt `schema.sql` bei jedem Start aus (`CREATE TABLE IF NOT EXISTS`) |
 | `jclaw.agent.max-iterations` | `8` | Maximale Agent-Iterationen (Tool-Runden) |
 | `jclaw.agent.max-history-messages` | `10` | Nachrichten pro Kontext im Memory-Fenster |
+
+## Persistenz
+
+Das Konversations-Memory wird über Spring JDBC in einer eingebetteten **H2-Datenbank** gespeichert:
+
+* Das Tabellenschema ist in `src/main/resources/schema.sql` definiert (Tabelle `chat_message` mit Primärschlüssel `(conversation_id, message_order)`).
+* Die Datenbankdatei wird beim ersten Start automatisch unter `./data/jclaw.mv.db` angelegt (Ordner `data/` ist in `.gitignore` ausgenommen).
+* `JdbcChatMemoryRepository` serialisiert alle Spring-AI-Message-Typen (System, User, Assistant inkl. Tool-Calls, Tool-Response) als JSON in die Spalte `message_json`.
+* Ein Neustart der Anwendung stellt den Gesprächsverlauf einer `contextId` automatisch wieder her.
+
+Hinweis: Die H2-Datei-Datenbank dient als lokale Standard-Persistenz. Für andere Datenbanken muss lediglich die `spring.datasource.url` (und ggf. der Treiber) angepasst werden; das Schema wird über `schema.sql` verwaltet.
 
 ## Start
 
