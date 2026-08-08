@@ -2,6 +2,7 @@ package biz.brumm.config;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.memory.ChatMemory;
+import org.springframework.ai.chat.memory.InMemoryChatMemoryRepository;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.UserMessage;
 
@@ -14,7 +15,7 @@ class ChatMemoryConfigTest {
     @Test
     void createsWindowedMemoryWithConfiguredWindow() {
         ChatMemoryConfig config = new ChatMemoryConfig();
-        ChatMemory memory = config.chatMemory(new ClawAgentProperties(8, 3));
+        ChatMemory memory = config.chatMemory(new ClawAgentProperties(8, 3), new InMemoryChatMemoryRepository());
 
         memory.add("ctx", List.of(
                 new UserMessage("a"),

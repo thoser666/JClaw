@@ -49,6 +49,9 @@ j
 .junie/
 .qodo/
 
+# Lokale H2-Dateidatenbank
+/data/
+
 # Betriebssystem-Dateien
 .DS_Store
 Thumbs.db
