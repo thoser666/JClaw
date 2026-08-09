@@ -1,0 +1,50 @@
+name: "Release"
+
+# Erstellt bei jedem Tag-Push (v0.1.0-alpha.1, v0.1.0-beta.1, v0.1.0-rc.1, v0.1.0, ...)
+# automatisch ein GitHub Release mit generiertem Changelog und Jar-Asset.
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up JDK 25
+      uses: actions/setup-java@v4
+      with:
+        java-version: '25'
+        distribution: 'temurin'
+        cache: 'maven'
+
+    # Führt Tests aus und baut das ausführbare Boot-Jar (bricht bei Fehlern ab)
+    - name: Build with Maven
+      run: ./mvnw -B clean package
+
+    # Versionsnummer aus dem Tag ableiten (fuehrendes 'v' entfernen)
+    - name: Derive version from tag
+      id: version
+      run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+    # Jar unter der Release-Version ablegen (unabhaengig von der pom-SNAPSHOT-Version)
+    - name: Rename jar artifact
+      run: |
+        jar=$(ls target/jclaw-*.jar | grep -v '\.original$' | head -n 1)
+        cp "$jar" "target/jclaw-${{ steps.version.outputs.version }}.jar"
+
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v2
+      with:
+        files: target/jclaw-${{ steps.version.outputs.version }}.jar
+        generate_release_notes: true
+        draft: false
+        # alpha/beta/rc-Releasekandidaten als Pre-Release markieren
+        prerelease: ${{ contains(github.ref_name, 'alpha') || contains(github.ref_name, 'beta') || contains(github.ref_name, 'rc') }}
