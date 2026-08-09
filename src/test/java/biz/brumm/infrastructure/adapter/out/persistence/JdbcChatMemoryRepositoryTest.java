@@ -17,17 +17,19 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class JdbcChatMemoryRepositoryTest {
 
     private final String dbName = UUID.randomUUID().toString();
+    private JdbcTemplate jdbcTemplate;
     private JdbcChatMemoryRepository repository;
 
     @BeforeEach
     void setUp() {
         JdbcDataSource dataSource = new JdbcDataSource();
         dataSource.setURL("jdbc:h2:mem:" + dbName + ";DB_CLOSE_DELAY=-1");
-        JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
+        jdbcTemplate = new JdbcTemplate(dataSource);
         jdbcTemplate.execute("""
                 CREATE TABLE IF NOT EXISTS chat_message (
                     conversation_id VARCHAR(255) NOT NULL,
@@ -96,6 +98,18 @@ class JdbcChatMemoryRepositoryTest {
 
         assertThat(repository.findByConversationId("ctx-1")).isEmpty();
         assertThat(repository.findConversationIds()).doesNotContain("ctx-1");
+    }
+
+    @Test
+    void throwsOnCorruptedJson() {
+        jdbcTemplate.update("""
+                INSERT INTO chat_message (conversation_id, message_order, message_type, message_json)
+                VALUES (?, ?, ?, ?)""",
+                "ctx-broken", 0, "USER", "{ kein json");
+
+        assertThatThrownBy(() -> repository.findByConversationId("ctx-broken"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("beschädigt");
     }
 
     @Test

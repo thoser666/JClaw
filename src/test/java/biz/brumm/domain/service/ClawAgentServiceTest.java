@@ -77,4 +77,22 @@ class ClawAgentServiceTest {
                                 && !prompt.contains("Erstelle Doku.")),
                 eq(8));
     }
+
+    @Test
+    void handleOmitsBlankSkillDescriptionAndContent() {
+        ClawAgentProperties properties = new ClawAgentProperties(8, 10);
+        SkillProperties skillProperties = new SkillProperties("./skills", List.of("lean"));
+        ClawAgentService service = new ClawAgentService(aiProviderPort, properties, skillProperties, skillProvider);
+        Skill lean = new Skill("lean", "   ", "   ", "/skills/lean");
+        when(skillProvider.findAll()).thenReturn(List.of(lean));
+        when(aiProviderPort.execute(any(AgentCommand.class), any(String.class), eq(8)))
+                .thenReturn(AgentResponse.of("Antwort"));
+
+        service.handle(new AgentCommand("Aufgabe", null));
+
+        verify(aiProviderPort).execute(any(AgentCommand.class), argThat(prompt ->
+                        prompt.contains("### Skill: lean")
+                                && !prompt.contains("Beschreibung:")),
+                eq(8));
+    }
 }
