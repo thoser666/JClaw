@@ -28,6 +28,7 @@ Das Projekt folgt der hexagonalen Struktur unter dem Package-Stamm `biz.brumm`:
 * **Agent-Loop mit Tool-Nutzung:** Das LLM kann in mehreren Iterationen Werkzeuge aufrufen und deren Ergebnisse verarbeiten, bis eine finale Antwort vorliegt oder das Iterationslimit erreicht ist.
   * `CalculatorTool` (`calculate`) – sicherer Rechner mit eigenem, minimalem Ausdrucks-Parser.
   * `DateTimeTool` (`getCurrentDateTime`) – aktuelle Uhrzeit/Datum mit optionaler Zeitzone.
+* **Skills (OpenClaw/AgentSkills-Format):** Skills aus dem konfigurierten Verzeichnis (`SKILL.md` mit YAML-Frontmatter) werden in den System-Prompt injiziert, sobald sie per `jclaw.agent.skills.enabled` aktiviert sind.
 * **Konversations-Memory:** Über eine optionale `contextId` wird der Gesprächsverlauf (Message-Window mit begrenzter Nachrichtenanzahl) pro Kontext gespeichert und bei Folgeanfragen wieder eingespielt. Die Nachrichten werden persistent in einer H2-Datei-Datenbank abgelegt (`./data/jclaw.mv.db`) und überleben so App-Neustarts.
 * **Fehlerbehandlung:** Ein globaler `@RestControllerAdvice` liefert bei ungültigen Anfragen (z. B. leerem Prompt) eine 400-Antwort mit Fehlermeldung.
 
@@ -55,6 +56,25 @@ Einstellungen in `src/main/resources/application.properties`:
 | `spring.sql.init.mode` | `always` | Führt `schema.sql` bei jedem Start aus (`CREATE TABLE IF NOT EXISTS`) |
 | `jclaw.agent.max-iterations` | `8` | Maximale Agent-Iterationen (Tool-Runden) |
 | `jclaw.agent.max-history-messages` | `10` | Nachrichten pro Kontext im Memory-Fenster |
+| `jclaw.agent.skills.dir` | `./skills` | Verzeichnis mit Skill-Ordnern (`SKILL.md`) |
+| `jclaw.agent.skills.enabled` | `-` (leer) | Namen der zu ladenden Skills (leer = keine Skills aktiv) |
+
+## Skills
+
+JClaw lädt Skills im **AgentSkills-Format** (OpenClaw-kompatibel): Jedes Unterverzeichnis von `jclaw.agent.skills.dir` entspricht einem Skill und enthält eine `SKILL.md`-Datei mit YAML-Frontmatter:
+
+```markdown
+---
+name: code-review
+description: Prüft Pull Requests systematisch auf Bugs.
+---
+
+Prüfe Änderungen auf Fehler ...
+```
+
+* Pflichtkonzept: `name` (Fallback: Ordnername) und `description`.
+* Nur per `jclaw.agent.skills.enabled` aktivierte Skills werden in den System-Prompt aufgenommen (Deny-by-Default).
+* Unterverzeichnisse ohne `SKILL.md`/`skill.md` oder ohne gültiges Frontmatter werden übersprungen.
 
 ## Persistenz
 

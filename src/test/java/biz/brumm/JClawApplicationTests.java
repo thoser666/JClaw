@@ -1,6 +1,7 @@
 package biz.brumm;
 
 import biz.brumm.config.ClawAgentProperties;
+import biz.brumm.config.SkillProperties;
 import biz.brumm.domain.port.in.ExecuteTaskUseCase;
 import biz.brumm.domain.port.out.AiProviderPort;
 import biz.brumm.infrastructure.adapter.in.web.TaskRestController;
@@ -35,6 +36,9 @@ class JClawApplicationTests {
     @Autowired
     private ClawAgentProperties clawAgentProperties;
 
+    @Autowired
+    private SkillProperties skillProperties;
+
     @Test
     void contextLoads() {
         assertThat(executeTaskUseCase).isNotNull();
@@ -48,6 +52,12 @@ class JClawApplicationTests {
     void agentPropertiesAreBoundFromConfiguration() {
         assertThat(clawAgentProperties.maxIterations()).isEqualTo(8);
         assertThat(clawAgentProperties.maxHistoryMessages()).isEqualTo(10);
+    }
+
+    @Test
+    void skillPropertiesUseDefaults() {
+        assertThat(skillProperties.dir()).isEqualTo("./skills");
+        assertThat(skillProperties.enabled()).isEmpty();
     }
 
     @Test
