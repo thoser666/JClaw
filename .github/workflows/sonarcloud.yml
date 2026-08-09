@@ -13,14 +13,18 @@ permissions:
 jobs:
   Analysis:
     runs-on: ubuntu-latest
-    # Laeuft erst, wenn das SONAR_TOKEN-Repo-Secret gesetzt ist
-    # (https://sonarcloud.io/account/security/)
-    if: ${{ secrets.SONAR_TOKEN != '' }}
 
     steps:
       - name: Analyze with SonarCloud (Maven Way)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        # Projekt-/Organisations-Key in den D-Werten an die eigene SonarCloud anpassen
-        run: mvn clean compile sonar:sonar -Dsonar.projectKey=thoser666_JClaw -Dsonar.organization=thoser666 -DskipTests
+        # Laeuft nur, wenn das SONAR_TOKEN-Repo-Secret gesetzt ist
+        # (https://sonarcloud.io/account/security/); sonst nur Warnung.
+        # Projekt-/Organisations-Key in den D-Werten an die eigene SonarCloud anpassen.
+        run: |
+          if [ -z "${SONAR_TOKEN:-}" ]; then
+            echo "::warning::SONAR_TOKEN nicht gesetzt - SonarCloud-Analyse uebersprungen."
+            exit 0
+          fi
+          mvn clean compile sonar:sonar -Dsonar.projectKey=thoser666_JClaw -Dsonar.organization=thoser666 -DskipTests
