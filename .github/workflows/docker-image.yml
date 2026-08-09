@@ -3,6 +3,8 @@ name: "Build and Push Docker Image"
 on:
   push:
     branches: [ "master", "develop" ]
+    tags:
+      - "v*"
 
 # Erlaubt dem GitHub-Runner, Pakete in deiner GitHub Registry zu speichern
 permissions:
@@ -42,6 +44,7 @@ jobs:
         tags: |
           type=ref,event=branch
           type=raw,value=latest,enable=${{ github.ref == 'refs/heads/master' }}
+          type=semver,pattern={{version}}
 
     # Baut das Image anhand deines Dockerfiles und pusht es in deine GHCR
     - name: Build and push Docker image
