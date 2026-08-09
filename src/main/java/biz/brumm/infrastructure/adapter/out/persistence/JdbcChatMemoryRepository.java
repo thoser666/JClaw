@@ -106,8 +106,8 @@ public class JdbcChatMemoryRepository implements ChatMemoryRepository {
             throw new IllegalStateException("Gespeicherte Konversationsnachricht ist beschädigt.", e);
         }
 
-        MessageType type = MessageType.valueOf(node.get("type").asText());
-        String text = node.hasNonNull("text") ? node.get("text").asText() : null;
+        MessageType type = MessageType.valueOf(node.get("type").asString());
+        String text = node.hasNonNull("text") ? node.get("text").asString() : null;
 
         return switch (type) {
             case SYSTEM -> new SystemMessage(text);
@@ -118,10 +118,10 @@ public class JdbcChatMemoryRepository implements ChatMemoryRepository {
                 if (toolCallsNode != null) {
                     for (JsonNode toolCall : toolCallsNode) {
                         toolCalls.add(new AssistantMessage.ToolCall(
-                                toolCall.get("id").asText(),
-                                toolCall.get("type").asText(),
-                                toolCall.get("name").asText(),
-                                toolCall.get("arguments").asText()));
+                                toolCall.get("id").asString(),
+                                toolCall.get("type").asString(),
+                                toolCall.get("name").asString(),
+                                toolCall.get("arguments").asString()));
                     }
                 }
                 yield AssistantMessage.builder().content(text).toolCalls(toolCalls).build();
@@ -132,9 +132,9 @@ public class JdbcChatMemoryRepository implements ChatMemoryRepository {
                 if (responsesNode != null) {
                     for (JsonNode response : responsesNode) {
                         responses.add(new ToolResponseMessage.ToolResponse(
-                                response.get("id").asText(),
-                                response.get("name").asText(),
-                                response.get("responseData").asText()));
+                                response.get("id").asString(),
+                                response.get("name").asString(),
+                                response.get("responseData").asString()));
                     }
                 }
                 yield ToolResponseMessage.builder().responses(responses).build();

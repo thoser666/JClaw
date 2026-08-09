@@ -53,7 +53,7 @@ class OllamaAiAdapterTest {
     }
 
     private OllamaAiAdapter adapter(List<AgentTool> tools, ChatMemory memory) {
-        when(chatModel.getDefaultOptions()).thenReturn(OllamaChatOptions.builder().model("qwen3:8b").build());
+        when(chatModel.getOptions()).thenReturn(OllamaChatOptions.builder().model("qwen3:8b").build());
         return new OllamaAiAdapter(chatModel, toolCallingManager, tools, memory);
     }
 
