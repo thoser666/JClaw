@@ -136,6 +136,46 @@ curl -X POST http://localhost:8080/api/v1/tasks \
   -d '{"prompt":"Berechne (12+4)*2/8","contextId":null}'
 ```
 
+### Verfügbare Skills auflisten
+
+`GET /api/v1/skills`
+
+Antwort (HTTP 200):
+
+```json
+[
+  {
+    "name": "code-review",
+    "description": "Prüft Pull Requests systematisch auf Bugs.",
+    "enabled": true
+  }
+]
+```
+
+* `enabled` gibt an, ob der Skill per `jclaw.agent.skills.enabled` aktiviert ist.
+
+### Konversationsverlauf einer contextId abrufen
+
+`GET /api/v1/conversations/{contextId}`
+
+Antwort (HTTP 200):
+
+```json
+[
+  {
+    "role": "USER",
+    "text": "Berechne 2+2"
+  },
+  {
+    "role": "ASSISTANT",
+    "text": "4"
+  }
+]
+```
+
+* `role` ist eine der Rollen `SYSTEM`, `USER`, `ASSISTANT` oder `TOOL`.
+* Für unbekannte oder leere `contextId` wird eine leere Liste zurückgegeben.
+
 ## Tests
 
 ```bash
