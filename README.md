@@ -28,6 +28,7 @@ Das Projekt folgt der hexagonalen Struktur unter dem Package-Stamm `biz.brumm`:
 * **Agent-Loop mit Tool-Nutzung:** Das LLM kann in mehreren Iterationen Werkzeuge aufrufen und deren Ergebnisse verarbeiten, bis eine finale Antwort vorliegt oder das Iterationslimit erreicht ist.
   * `CalculatorTool` (`calculate`) – sicherer Rechner mit eigenem, minimalem Ausdrucks-Parser.
   * `DateTimeTool` (`getCurrentDateTime`) – aktuelle Uhrzeit/Datum mit optionaler Zeitzone.
+  * `FileTool` (`readFile`, `listDirectory`, `writeFile`) – Dateizugriff innerhalb eines konfigurierten Arbeitsverzeichnisses (optional, s. u.).
 * **Skills (OpenClaw/AgentSkills-Format):** Skills aus dem konfigurierten Verzeichnis (`SKILL.md` mit YAML-Frontmatter) werden in den System-Prompt injiziert, sobald sie per `jclaw.agent.skills.enabled` aktiviert sind.
 * **Konversations-Memory:** Über eine optionale `contextId` wird der Gesprächsverlauf (Message-Window mit begrenzter Nachrichtenanzahl) pro Kontext gespeichert und bei Folgeanfragen wieder eingespielt. Die Nachrichten werden persistent in einer H2-Datei-Datenbank abgelegt (`./data/jclaw.mv.db`) und überleben so App-Neustarts.
 * **Fehlerbehandlung:** Ein globaler `@RestControllerAdvice` liefert bei ungültigen Anfragen (z. B. leerem Prompt) eine 400-Antwort mit Fehlermeldung.
@@ -58,6 +59,8 @@ Einstellungen in `src/main/resources/application.properties`:
 | `jclaw.agent.max-history-messages` | `10` | Nachrichten pro Kontext im Memory-Fenster |
 | `jclaw.agent.skills.dir` | `./skills` | Verzeichnis mit Skill-Ordnern (`SKILL.md`) |
 | `jclaw.agent.skills.enabled` | `-` (leer) | Namen der zu ladenden Skills (leer = keine Skills aktiv) |
+| `jclaw.agent.filetool.workdir` | `-` (nicht gesetzt) | Arbeitsverzeichnis der Datei-Werkzeuge. Erst wenn gesetzt, werden `readFile`, `listDirectory` und `writeFile` registriert (Deny-by-Default) |
+| `jclaw.agent.filetool.max-read-bytes` | `1048576` (1 MiB) | Maximale Dateigröße, die der Agent lesen darf |
 
 ## Skills
 
@@ -75,6 +78,17 @@ Prüfe Änderungen auf Fehler ...
 * Pflichtkonzept: `name` (Fallback: Ordnername) und `description`.
 * Nur per `jclaw.agent.skills.enabled` aktivierte Skills werden in den System-Prompt aufgenommen (Deny-by-Default).
 * Unterverzeichnisse ohne `SKILL.md`/`skill.md` oder ohne gültiges Frontmatter werden übersprungen.
+
+## Datei-Werkzeuge
+
+Sobald `jclaw.agent.filetool.workdir` gesetzt ist, erhält der Agent die Werkzeuge `readFile`, `listDirectory` und `writeFile`:
+
+* Alle Pfade werden relativ zum Arbeitsverzeichnis aufgelöst.
+* Zugriffe außerhalb des Arbeitsverzeichnisses (Pfad-Traversal, absolute Pfade, `..`) werden mit einer Fehlermeldung abgewiesen.
+* `readFile` verweigert Dateien, die größer als `jclaw.agent.filetool.max-read-bytes` sind (Standard: 1 MiB).
+* `writeFile` legt fehlende Zwischenverzeichnisse automatisch an.
+
+Ohne gesetztes `workdir` sind die Datei-Werkzeuge nicht aktiv (Deny-by-Default).
 
 ## Persistenz
 
