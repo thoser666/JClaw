@@ -21,6 +21,7 @@
         <spring-ai.version>2.0.0</spring-ai.version>
         <netty.version>4.2.16.Final</netty.version>
         <jackson-bom.version>3.1.5</jackson-bom.version>
+        <mockito.version>5.23.0</mockito.version>
     </properties>
 
     <dependencies>
@@ -91,6 +92,13 @@
                 <groupId>org.sonarsource.scanner.maven</groupId>
                 <artifactId>sonar-maven-plugin</artifactId>
                 <version>5.7.0.6970</version>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <argLine>-javaagent:${settings.localRepository}/org/mockito/mockito-core/${mockito.version}/mockito-core-${mockito.version}.jar</argLine>
+                </configuration>
             </plugin>
         </plugins>
     </build>
