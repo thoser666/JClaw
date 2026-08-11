@@ -190,6 +190,12 @@ Antwort (HTTP 200):
 * `role` ist eine der Rollen `SYSTEM`, `USER`, `ASSISTANT` oder `TOOL`.
 * Für unbekannte oder leere `contextId` wird eine leere Liste zurückgegeben.
 
+### Konversation löschen
+
+`DELETE /api/v1/conversations/{contextId}`
+
+Löscht den gesamten gespeicherten Verlauf einer `contextId` (idempotent). Antwort (HTTP 204, ohne Body).
+
 ## Tests
 
 ```bash

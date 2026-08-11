@@ -32,4 +32,14 @@ class ChatMemoryConversationStoreTest {
 
         assertThat(store.findByContextId("unbekannt")).isEmpty();
     }
+
+    @Test
+    void deleteRemovesConversation() {
+        repository.saveAll("ctx-1", List.of(new UserMessage("a")));
+        ChatMemoryConversationStore store = new ChatMemoryConversationStore(repository);
+
+        store.deleteByContextId("ctx-1");
+
+        assertThat(store.findByContextId("ctx-1")).isEmpty();
+    }
 }

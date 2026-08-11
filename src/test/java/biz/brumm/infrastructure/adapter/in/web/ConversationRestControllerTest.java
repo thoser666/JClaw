@@ -1,6 +1,7 @@
 package biz.brumm.infrastructure.adapter.in.web;
 
 import biz.brumm.domain.model.ConversationMessage;
+import biz.brumm.domain.port.in.DeleteConversationUseCase;
 import biz.brumm.domain.port.in.GetConversationUseCase;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -11,7 +12,9 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.util.List;
 
 import static org.hamcrest.Matchers.hasSize;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -24,6 +27,9 @@ class ConversationRestControllerTest {
 
     @MockitoBean
     private GetConversationUseCase getConversationUseCase;
+
+    @MockitoBean
+    private DeleteConversationUseCase deleteConversationUseCase;
 
     @Test
     void getConversationReturnsMessages() throws Exception {
@@ -47,5 +53,13 @@ class ConversationRestControllerTest {
         mockMvc.perform(get("/api/v1/conversations/unbekannt"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(0)));
+    }
+
+    @Test
+    void deleteConversationReturnsNoContentAndDelegates() throws Exception {
+        mockMvc.perform(delete("/api/v1/conversations/ctx-1"))
+                .andExpect(status().isNoContent());
+
+        verify(deleteConversationUseCase).deleteConversation("ctx-1");
     }
 }

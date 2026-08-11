@@ -10,4 +10,6 @@ import java.util.List;
 public interface ConversationStore {
 
     List<ConversationMessage> findByContextId(String contextId);
+
+    void deleteByContextId(String contextId);
 }

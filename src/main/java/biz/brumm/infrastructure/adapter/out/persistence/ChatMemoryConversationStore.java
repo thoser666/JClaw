@@ -29,6 +29,11 @@ public class ChatMemoryConversationStore implements ConversationStore {
                 .toList();
     }
 
+    @Override
+    public void deleteByContextId(String contextId) {
+        chatMemoryRepository.deleteByConversationId(contextId);
+    }
+
     private ConversationMessage toDomainMessage(Message message) {
         return new ConversationMessage(message.getMessageType().name(), message.getText());
     }
