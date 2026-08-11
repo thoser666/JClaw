@@ -29,6 +29,7 @@ Das Projekt folgt der hexagonalen Struktur unter dem Package-Stamm `biz.brumm`:
   * `CalculatorTool` (`calculate`) – sicherer Rechner mit eigenem, minimalem Ausdrucks-Parser.
   * `DateTimeTool` (`getCurrentDateTime`) – aktuelle Uhrzeit/Datum mit optionaler Zeitzone.
   * `FileTool` (`readFile`, `listDirectory`, `writeFile`) – Dateizugriff innerhalb eines konfigurierten Arbeitsverzeichnisses (optional, s. u.).
+  * `ShellTool` (`runCommand`) – führt Shell-Befehle im Arbeitsverzeichnis aus (optional, s. u.).
 * **Skills (OpenClaw/AgentSkills-Format):** Skills aus dem konfigurierten Verzeichnis (`SKILL.md` mit YAML-Frontmatter) werden in den System-Prompt injiziert, sobald sie per `jclaw.agent.skills.enabled` aktiviert sind.
 * **Konversations-Memory:** Über eine optionale `contextId` wird der Gesprächsverlauf (Message-Window mit begrenzter Nachrichtenanzahl) pro Kontext gespeichert und bei Folgeanfragen wieder eingespielt. Die Nachrichten werden persistent in einer H2-Datei-Datenbank abgelegt (`./data/jclaw.mv.db`) und überleben so App-Neustarts.
 * **Fehlerbehandlung:** Ein globaler `@RestControllerAdvice` liefert bei ungültigen Anfragen (z. B. leerem Prompt) eine 400-Antwort mit Fehlermeldung.
@@ -61,6 +62,10 @@ Einstellungen in `src/main/resources/application.properties`:
 | `jclaw.agent.skills.enabled` | `-` (leer) | Namen der zu ladenden Skills (leer = keine Skills aktiv) |
 | `jclaw.agent.filetool.workdir` | `-` (nicht gesetzt) | Arbeitsverzeichnis der Datei-Werkzeuge. Erst wenn gesetzt, werden `readFile`, `listDirectory` und `writeFile` registriert (Deny-by-Default) |
 | `jclaw.agent.filetool.max-read-bytes` | `1048576` (1 MiB) | Maximale Dateigröße, die der Agent lesen darf |
+| `jclaw.agent.shelltool.enabled` | `false` | Schaltet das `runCommand`-Werkzeug frei (nur `true` registriert es, Deny-by-Default) |
+| `jclaw.agent.shelltool.workdir` | aktuelles Verzeichnis | Arbeitsverzeichnis, in dem Befehle ausgeführt werden |
+| `jclaw.agent.shelltool.timeout-seconds` | `30` | Maximale Laufzeit eines Befehls |
+| `jclaw.agent.shelltool.max-output-chars` | `10000` | Maximale Zeichenanzahl der zurückgegebenen Ausgabe |
 
 ## Skills
 
@@ -89,6 +94,16 @@ Sobald `jclaw.agent.filetool.workdir` gesetzt ist, erhält der Agent die Werkzeu
 * `writeFile` legt fehlende Zwischenverzeichnisse automatisch an.
 
 Ohne gesetztes `workdir` sind die Datei-Werkzeuge nicht aktiv (Deny-by-Default).
+
+## Shell-Werkzeug
+
+Sobald `jclaw.agent.shelltool.enabled=true` gesetzt ist, erhält der Agent das Werkzeug `runCommand`:
+
+* Befehle laufen im konfigurierten `workdir` (Standard: aktuelles Verzeichnis).
+* Ein Befehl wird nach `jclaw.agent.shelltool.timeout-seconds` Sekunden abgebrochen (inkl. Kindprozessen).
+* Die Ausgabe wird auf `jclaw.agent.shelltool.max-output-chars` Zeichen gekürzt; auch Exit-Codes werden gemeldet.
+
+**Sicherheitshinweis:** Shell-Ausführung ist mächtig und riskant. Standardmäßig ist das Werkzeug deaktiviert — aktivieren Sie es nur in kontrollierten Umgebungen.
 
 ## Persistenz
 
