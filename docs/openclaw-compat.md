@@ -237,7 +237,9 @@ Datei-/Shell-Zugriff (`exec`, `read`/`write`/`glob`/`grep`, `apply_patch`), Web 
 
 ## 9. Nächste Schritte
 
-1. **Pilot-Skill**: Einen OpenClaw-Skill (z. B. aus `~/.agents/skills`) in JClaw laden und per Agent verwenden — validiert §2 und den Skill-Pipeline-Pfad.
-2. **Pilot-Plugin-Manifest**: Ein echtes `openclaw.plugin.json` parsen/validieren (Control-Plane) ohne Codeausführung.
-3. **Architektur-Entscheidung bestätigen**: Node-Sidecar (Empfehlung) vs. GraalJS vs. Java-Reimplementation auf Basis dieses Dokuments.
-4. Danach: Bridge-Protokoll spezifizieren, Kern-Tools erweitern, Session-Konzept auf H2 umbauen, MCP-Client anbinden.
+> Der Fortschritt wird in der [Paritäts-Roadmap](parity-roadmap.md) verfolgt. Stand: P0 (Fundament) und P1-01 (Plugin Control-Plane) sind abgeschlossen.
+
+1. **Architektur-Entscheidung bestätigen**: Node-Sidecar (Empfehlung) vs. GraalJS vs. Java-Reimplementation auf Basis dieses Dokuments.
+2. **Bridge-Protokoll spezifizieren**, dann Node-Sidecar für die Plugin-Laufzeit.
+3. **MCP-Client anbinden**, **Session-Konzept auf H2 umbauen**, **Kern-Tools erweitern** (Web-Tools, `apply_patch`).
+4. Danach: Channels, Konfig-Gateway (JSON5), Hooks, Cron gemäß Roadmap.
