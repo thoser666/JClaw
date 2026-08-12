@@ -32,6 +32,7 @@ Das Projekt folgt der hexagonalen Struktur unter dem Package-Stamm `biz.brumm`:
   * `ShellTool` (`runCommand`) – führt Shell-Befehle im Arbeitsverzeichnis aus (optional, s. u.).
 * **Skills (OpenClaw/AgentSkills-Format):** Skills aus dem konfigurierten Verzeichnis (`SKILL.md` mit YAML-Frontmatter) werden in den System-Prompt injiziert, sobald sie per `jclaw.agent.skills.enabled` aktiviert sind.
 * **Konversations-Memory:** Über eine optionale `contextId` wird der Gesprächsverlauf (Message-Window mit begrenzter Nachrichtenanzahl) pro Kontext gespeichert und bei Folgeanfragen wieder eingespielt. Die Nachrichten werden persistent in einer H2-Datei-Datenbank abgelegt (`./data/jclaw.mv.db`) und überleben so App-Neustarts.
+* **Plugins (Control-Plane):** Plugin-Manifeste im OpenClaw-Format (`openclaw.plugin.json`) sowie kompatible fremde Bundles (Agent Plugins, Codex, Claude, Cursor) werden gelesen und ohne Codeausführung validiert (Pflichtfelder, Schema-Struktur).
 * **Fehlerbehandlung:** Ein globaler `@RestControllerAdvice` liefert bei ungültigen Anfragen (z. B. leerem Prompt) eine 400-Antwort mit Fehlermeldung.
 
 ## Voraussetzungen
@@ -58,6 +59,7 @@ Einstellungen in `src/main/resources/application.properties`:
 | `spring.sql.init.mode` | `always` | Führt `schema.sql` bei jedem Start aus (`CREATE TABLE IF NOT EXISTS`) |
 | `jclaw.agent.max-iterations` | `8` | Maximale Agent-Iterationen (Tool-Runden) |
 | `jclaw.agent.max-history-messages` | `10` | Nachrichten pro Kontext im Memory-Fenster |
+| `jclaw.agent.plugins.dir` | `./plugins` | Verzeichnis mit Plugin-Ordnern (Manifeste) |
 | `jclaw.agent.skills.dir` | `./skills` | Verzeichnis mit Skill-Ordnern (`SKILL.md`) |
 | `jclaw.agent.skills.enabled` | `-` (leer) | Namen der zu ladenden Skills (leer = keine Skills aktiv) |
 | `jclaw.agent.filetool.workdir` | `-` (nicht gesetzt) | Arbeitsverzeichnis der Datei-Werkzeuge. Erst wenn gesetzt, werden `readFile`, `listDirectory` und `writeFile` registriert (Deny-by-Default) |
@@ -83,6 +85,30 @@ Prüfe Änderungen auf Fehler ...
 * Pflichtkonzept: `name` (Fallback: Ordnername) und `description`.
 * Nur per `jclaw.agent.skills.enabled` aktivierte Skills werden in den System-Prompt aufgenommen (Deny-by-Default).
 * Unterverzeichnisse ohne `SKILL.md`/`skill.md` oder ohne gültiges Frontmatter werden übersprungen.
+
+## Plugins (Control-Plane)
+
+JClaw liest Plugin-Manifeste aus `jclaw.agent.plugins.dir` (Standard: `./plugins`). Jedes Unterverzeichnis entspricht einem Plugin; erkannt werden:
+
+| Format | Manifest-Datei | Pflichtfelder |
+|---|---|---|
+| OpenClaw | `openclaw.plugin.json` | `id` (Struktur-Check von `configSchema`/`mcpServers`) |
+| Agent Plugins | `plugin.json` | `name`, `version` |
+| Codex | `.codex-plugin/plugin.json` | `name`, `version` |
+| Claude | `.claude-plugin/plugin.json` | `name`, `version` |
+| Cursor | `.cursor-plugin/plugin.json` | `name`, `version` |
+
+Beispiel (OpenClaw):
+
+```json
+{
+  "id": "acme/demo",
+  "name": "Demo Plugin",
+  "configSchema": { "type": "object" }
+}
+```
+
+Die Manifeste werden **ohne Codeausführung** validiert (Control-Plane). Ungültige Plugins werden in der API mit `valid: false` und einer Fehlermeldung ausgewiesen statt verworfen. Die eigentliche Plugin-Laufzeit (TypeScript) erfordert einen Node-Sidecar (siehe `docs/openclaw-compat.md`).
 
 ## Datei-Werkzeuge
 
@@ -182,6 +208,29 @@ Antwort (HTTP 200):
 ```
 
 * `enabled` gibt an, ob der Skill per `jclaw.agent.skills.enabled` aktiviert ist.
+
+### Verfügbare Plugins auflisten
+
+`GET /api/v1/plugins`
+
+Antwort (HTTP 200):
+
+```json
+[
+  {
+    "id": "acme/demo",
+    "name": "Demo Plugin",
+    "version": "1.2.0",
+    "description": "Test-Plugin.",
+    "type": "OPENCLAW",
+    "valid": true,
+    "validationMessage": ""
+  }
+]
+```
+
+* `type` ist eines von `OPENCLAW`, `AGENT_PLUGINS`, `CODEX`, `CLAUDE`, `CURSOR`.
+* `valid`/`validationMessage` zeigen das Ergebnis der Control-Plane-Validierung (ungültige Plugins werden nicht verworfen, sondern ausgewiesen).
 
 ### Konversationsverlauf einer contextId abrufen
 
