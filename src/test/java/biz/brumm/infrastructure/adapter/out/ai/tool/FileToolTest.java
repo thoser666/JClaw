@@ -110,4 +110,124 @@ class FileToolTest {
     void writeFileRejectsBlankPath() {
         assertThat(tool().writeFile("", "x")).isEqualTo("Fehler: Pfad darf nicht leer sein.");
     }
+
+    @Test
+    void globFindsFilesRecursively() throws IOException {
+        Files.writeString(tempDir.resolve("a.txt"), "a", StandardCharsets.UTF_8);
+        Files.writeString(tempDir.resolve("b.log"), "b", StandardCharsets.UTF_8);
+        Files.createDirectories(tempDir.resolve("src/main"));
+        Files.writeString(tempDir.resolve("src/main/c.txt"), "c", StandardCharsets.UTF_8);
+        Files.writeString(tempDir.resolve("src/main/d.java"), "d", StandardCharsets.UTF_8);
+
+        assertThat(tool().glob("**/*.txt"))
+                .contains("a.txt", "src/main/c.txt")
+                .doesNotContain("b.log", "src/main/d.java");
+    }
+
+    @Test
+    void globFindsFilesWithRelativePrefix() throws IOException {
+        Files.createDirectories(tempDir.resolve("src"));
+        Files.writeString(tempDir.resolve("src/App.java"), "x", StandardCharsets.UTF_8);
+        Files.writeString(tempDir.resolve("other.txt"), "y", StandardCharsets.UTF_8);
+
+        assertThat(tool().glob("src/*.java")).isEqualTo("src/App.java");
+    }
+
+    @Test
+    void globReturnsNoMatchesMessage() throws IOException {
+        Files.writeString(tempDir.resolve("a.txt"), "a", StandardCharsets.UTF_8);
+
+        assertThat(tool().glob("*.xyz")).isEqualTo("(keine Treffer)");
+    }
+
+    @Test
+    void globRejectsTraversalPattern() {
+        assertThat(tool().glob("../*.txt"))
+                .isEqualTo("Fehler: Pfad liegt außerhalb des Arbeitsverzeichnisses.");
+    }
+
+    @Test
+    void globRejectsAbsolutePattern() {
+        assertThat(tool().glob("C:/Windows/*.txt"))
+                .isEqualTo("Fehler: Pfad liegt außerhalb des Arbeitsverzeichnisses.");
+    }
+
+    @Test
+    void globRejectsBlankPattern() {
+        assertThat(tool().glob(" ")).isEqualTo("Fehler: Muster darf nicht leer sein.");
+    }
+
+    @Test
+    void globTruncatesAtResultLimit() throws IOException {
+        for (int i = 0; i < 105; i++) {
+            Files.writeString(tempDir.resolve("file-" + i + ".txt"), "x", StandardCharsets.UTF_8);
+        }
+
+        String result = tool().glob("*.txt");
+
+        assertThat(result.lines()).hasSize(101);
+        assertThat(result).endsWith("(gekürzt, Trefferlimit erreicht)");
+    }
+
+    @Test
+    void grepFindsMatchesAcrossFiles() throws IOException {
+        Files.writeString(tempDir.resolve("one.txt"), "Hallo Welt\nkein Treffer", StandardCharsets.UTF_8);
+        Files.createDirectories(tempDir.resolve("sub"));
+        Files.writeString(tempDir.resolve("sub/two.txt"),
+                "Zweite\nWelt wieder", StandardCharsets.UTF_8);
+
+        String result = tool().grep("Welt", "");
+
+        assertThat(result).contains("one.txt:1: Hallo Welt");
+        assertThat(result).contains("sub/two.txt:2: Welt wieder");
+    }
+
+    @Test
+    void grepScopesSearchToSingleFile() throws IOException {
+        Files.createDirectories(tempDir.resolve("sub"));
+        Files.writeString(tempDir.resolve("sub/only.txt"), "geheim", StandardCharsets.UTF_8);
+
+        assertThat(tool().grep("geheim", "sub/only.txt")).contains("sub/only.txt:1: geheim");
+    }
+
+    @Test
+    void grepRespectsDirectoryScope() throws IOException {
+        Files.writeString(tempDir.resolve("root.txt"), "marker", StandardCharsets.UTF_8);
+        Files.createDirectories(tempDir.resolve("sub"));
+        Files.writeString(tempDir.resolve("sub/nested.txt"), "marker", StandardCharsets.UTF_8);
+
+        String result = tool().grep("marker", "sub");
+
+        assertThat(result).contains("sub/nested.txt:1: marker");
+        assertThat(result).doesNotContain("root.txt");
+    }
+
+    @Test
+    void grepReturnsNoMatchesMessage() throws IOException {
+        Files.writeString(tempDir.resolve("a.txt"), "Hallo", StandardCharsets.UTF_8);
+
+        assertThat(tool().grep("nix-da", "")).isEqualTo("(keine Treffer)");
+    }
+
+    @Test
+    void grepRejectsInvalidRegex() {
+        assertThat(tool().grep("[", "")).startsWith("Fehler: ungültiger regulärer Ausdruck:");
+    }
+
+    @Test
+    void grepRejectsBlankRegex() {
+        assertThat(tool().grep(" ", "")).isEqualTo("Fehler: Suchmuster darf nicht leer sein.");
+    }
+
+    @Test
+    void grepRejectsTraversalPath() {
+        assertThat(tool().grep("x", "../"))
+                .isEqualTo("Fehler: Pfad liegt außerhalb des Arbeitsverzeichnisses.");
+    }
+
+    @Test
+    void grepReturnsErrorForMissingPath() {
+        assertThat(tool().grep("x", "unbekannt"))
+                .isEqualTo("Fehler: Pfad nicht gefunden: unbekannt");
+    }
 }

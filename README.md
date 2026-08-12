@@ -28,7 +28,7 @@ Das Projekt folgt der hexagonalen Struktur unter dem Package-Stamm `biz.brumm`:
 * **Agent-Loop mit Tool-Nutzung:** Das LLM kann in mehreren Iterationen Werkzeuge aufrufen und deren Ergebnisse verarbeiten, bis eine finale Antwort vorliegt oder das Iterationslimit erreicht ist.
   * `CalculatorTool` (`calculate`) – sicherer Rechner mit eigenem, minimalem Ausdrucks-Parser.
   * `DateTimeTool` (`getCurrentDateTime`) – aktuelle Uhrzeit/Datum mit optionaler Zeitzone.
-  * `FileTool` (`readFile`, `listDirectory`, `writeFile`) – Dateizugriff innerhalb eines konfigurierten Arbeitsverzeichnisses (optional, s. u.).
+  * `FileTool` (`readFile`, `listDirectory`, `writeFile`, `glob`, `grep`) – Dateizugriff und -suche innerhalb eines konfigurierten Arbeitsverzeichnisses (optional, s. u.).
   * `ShellTool` (`runCommand`) – führt Shell-Befehle im Arbeitsverzeichnis aus (optional, s. u.).
 * **Skills (OpenClaw/AgentSkills-Format):** Skills aus dem konfigurierten Verzeichnis (`SKILL.md` mit YAML-Frontmatter) werden in den System-Prompt injiziert, sobald sie per `jclaw.agent.skills.enabled` aktiviert sind.
 * **Konversations-Memory:** Über eine optionale `contextId` wird der Gesprächsverlauf (Message-Window mit begrenzter Nachrichtenanzahl) pro Kontext gespeichert und bei Folgeanfragen wieder eingespielt. Die Nachrichten werden persistent in einer H2-Datei-Datenbank abgelegt (`./data/jclaw.mv.db`) und überleben so App-Neustarts.
@@ -112,12 +112,14 @@ Die Manifeste werden **ohne Codeausführung** validiert (Control-Plane). Ungült
 
 ## Datei-Werkzeuge
 
-Sobald `jclaw.agent.filetool.workdir` gesetzt ist, erhält der Agent die Werkzeuge `readFile`, `listDirectory` und `writeFile`:
+Sobald `jclaw.agent.filetool.workdir` gesetzt ist, erhält der Agent die Werkzeuge `readFile`, `listDirectory`, `writeFile`, `glob` und `grep`:
 
 * Alle Pfade werden relativ zum Arbeitsverzeichnis aufgelöst.
 * Zugriffe außerhalb des Arbeitsverzeichnisses (Pfad-Traversal, absolute Pfade, `..`) werden mit einer Fehlermeldung abgewiesen.
 * `readFile` verweigert Dateien, die größer als `jclaw.agent.filetool.max-read-bytes` sind (Standard: 1 MiB).
 * `writeFile` legt fehlende Zwischenverzeichnisse automatisch an.
+* `glob` findet Dateien per Glob-Muster (z. B. `**/*.java`, `src/**/*.txt`) und gibt die Treffer relativ zum Arbeitsverzeichnis zurück (max. 100 Einträge).
+* `grep` durchsucht Textdateien (rekursiv in einem Verzeichnis oder eine einzelne Datei) nach einem regulären Ausdruck und liefert `pfad:zeile: inhalt`-Treffer (max. 200).
 
 Ohne gesetztes `workdir` sind die Datei-Werkzeuge nicht aktiv (Deny-by-Default).
 
