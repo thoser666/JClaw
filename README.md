@@ -4,7 +4,7 @@ JClaw ist ein autonomer, hochgradig strukturierter Software-Agent. Das Projekt i
 
 Die Anwendung ist strikt nach den Prinzipien der **Hexagonalen Architektur** (Ports and Adapters) aufgebaut, um die Kern-Domainlogik vollständig von Infrastruktur-Entscheidungen (wie dem spezifischen KI-Provider oder Web-Frameworks) zu entkoppeln.
 
-Der Weg zur **100 %-Parität mit OpenClaw** ist in der [Paritäts-Roadmap](docs/parity-roadmap.md) dokumentiert; die Formatanalyse dazu liegt in [docs/openclaw-compat.md](docs/openclaw-compat.md).
+Der Weg zur **100 %-Parität mit OpenClaw** ist in der [Paritäts-Roadmap](docs/parity-roadmap.md) dokumentiert; die Formatanalyse dazu liegt in [docs/openclaw-compat.md](docs/openclaw-compat.md), getroffene Architektur-Entscheidungen in `docs/adr/` (z. B. [ADR-0001 Node-Sidecar](docs/adr/0001-node-sidecar-plugin-runtime.md)).
 
 ## Tech Stack
 

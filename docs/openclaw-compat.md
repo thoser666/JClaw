@@ -210,7 +210,7 @@ Datei-/Shell-Zugriff (`exec`, `read`/`write`/`glob`/`grep`, `apply_patch`), Web 
 
 ## 8. Empfohlene Architektur
 
-**Java-Kern + Node-Sidecar** (schwache Kopplung, getrennte Prozesse):
+**Entschieden (ADR-0001): Java-Kern + Node-Sidecar** (schwache Kopplung, getrennte Prozesse). Framing: JSON-RPC 2.0, Newline-delimited über stdio.
 
 ```
 ┌─────────────────────────── Java (JClaw) ───────────────────────────┐
@@ -229,17 +229,17 @@ Datei-/Shell-Zugriff (`exec`, `read`/`write`/`glob`/`grep`, `apply_patch`), Web 
 └────────────────────────────────────┘
 ```
 
-- **Sidecar** führt nur die Plugin-Laufzeit aus (`definePluginEntry`/`defineChannelPluginEntry`); Java ruft Tools/Hooks über eine schlanke JSON-RPC/HTTP-Bridge auf.
+- **Sidecar** führt nur die Plugin-Laufzeit aus (`definePluginEntry`/`defineChannelPluginEntry`); Java ruft Tools/Hooks über eine schlanke JSON-RPC/stdio-Bridge auf.
 - Skills, Konfig, Kern-Tools, Memory laufen **ohne Node** in Java → reines OpenClaw-Setup benötigt keinen Sidecar.
 - Voraussetzung auf Zielsystemen: Node.js-Runtime (dokumentieren, wie OpenClaw es tut).
+- Validierung: Feasibility-Spike `NodeSidecarBridge` (JSON-RPC über stdio, siehe ADR-0001).
 
 ---
 
 ## 9. Nächste Schritte
 
-> Der Fortschritt wird in der [Paritäts-Roadmap](parity-roadmap.md) verfolgt. Stand: P0 (Fundament) und P1-01 (Plugin Control-Plane) sind abgeschlossen.
+> Der Fortschritt wird in der [Paritäts-Roadmap](parity-roadmap.md) verfolgt. Stand: P0 (Fundament), P1-01 (Plugin Control-Plane) und **P1-02 (Architektur-Entscheidung Node-Sidecar)** sind abgeschlossen.
 
-1. **Architektur-Entscheidung bestätigen**: Node-Sidecar (Empfehlung) vs. GraalJS vs. Java-Reimplementation auf Basis dieses Dokuments.
-2. **Bridge-Protokoll spezifizieren**, dann Node-Sidecar für die Plugin-Laufzeit.
-3. **MCP-Client anbinden**, **Session-Konzept auf H2 umbauen**, **Kern-Tools erweitern** (Web-Tools, `apply_patch`).
-4. Danach: Channels, Konfig-Gateway (JSON5), Hooks, Cron gemäß Roadmap.
+1. **Bridge-Protokoll spezifizieren** (P1-03) und den Node-Sidecar zu einem verwaltbaren Dienst ausbauen.
+2. **MCP-Client anbinden**, **Session-Konzept auf H2 umbauen**, **Kern-Tools erweitern** (Web-Tools, `apply_patch`).
+3. Danach: Channels, Konfig-Gateway (JSON5), Hooks, Cron gemäß Roadmap.

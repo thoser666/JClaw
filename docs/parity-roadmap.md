@@ -43,8 +43,8 @@ Agent-Kern-Fähigkeiten, die OpenClaw zusätzlich bietet und die ohne JS möglic
 | ID | Baustein | Beschreibung | Priorität | Status |
 |---|---|---|---|---|
 | P1-01 | Plugin Control-Plane | Manifeste lesen/validieren (`openclaw.plugin.json` + Agent-Plugins/Codex/Claude/Cursor), ohne Codeausführung; `GET /api/v1/plugins` | 🔴 | ✅ |
-| P1-02 | Architektur-Entscheidung | Node-Sidecar (Empfehlung) vs. GraalJS vs. Java-Reimplementation für die Plugin-Laufzeit verbindlich festlegen | 🔴 | 🚫 |
-| P1-03 | Bridge-Protokoll | JSON-RPC/HTTP-Bridge zwischen Java-Kern und Node-Sidecar spezifizieren (Tool-/Hook-/Command-Registrierung, Ergebnis-Rückgabe) | 🔴 | 🚫 |
+| P1-02 | Architektur-Entscheidung | **Node-Sidecar bestätigt** (JSON-RPC 2.0 über stdio). Spike validiert Java ↔ Node-Kommunikation. Siehe [ADR-0001](adr/0001-node-sidecar-plugin-runtime.md) | 🔴 | ✅ |
+| P1-03 | Bridge-Protokoll | Vollständige JSON-RPC-Spezifikation (Tool-/Hook-/Command-Registrierung, Ergebnis-Rückgabe). Framing liegt mit `JsonRpcLineCodec`/`NodeSidecarBridge` vor | 🔴 | 🔵 |
 | P1-04 | MCP-Client | `mcp.servers`-Unterstützung: externe Model Context Protocol-Server als Tools integrieren | 🔴 | ⬜ |
 | P1-05 | Web-Tools | `web_fetch` (mit `allowedDomains`-Policy) und `web_search` | 🟡 | ⬜ |
 | P1-06 | Kern-Tool: Patch | `apply_patch` für strukturierte Datei-Änderungen | 🟡 | ⬜ |
@@ -89,7 +89,7 @@ OpenClaw-Kernfeature: Nachrichten von/nach externen Plattformen.
 
 | ID | Baustein | Beschreibung | Priorität | Status |
 |---|---|---|---|---|
-| P4-01 | Plugin-Laufzeit | Node-Sidecar führt `definePluginEntry`/`defineChannelPluginEntry` aus (setzt P1-02/03 voraus) | 🔴 | 🚫 |
+| P4-01 | Plugin-Laufzeit | Node-Sidecar führt `definePluginEntry`/`defineChannelPluginEntry` aus (setzt P1-03 voraus) | 🔴 | 🚫 |
 | P4-02 | Wissen-Memory | Semantisches Memory über Embeddings (z. B. pgvector/Chroma), `kind: "memory"`, Injektion relevanter Chunks | 🟡 | ⬜ |
 | P4-03 | Media-Provider | Speech/Media-Provider (TTS/STT) | 🟢 | ⬜ |
 | P4-04 | Provider-Abstraktion | Modell-Provider über Ollama hinaus (OpenAI-kompatibel, Anthropic, …) via Spring AI | 🟡 | ⬜ |
@@ -99,9 +99,10 @@ OpenClaw-Kernfeature: Nachrichten von/nach externen Plattformen.
 
 ## Offene Architektur-Entscheidungen
 
-1. **Plugin-Laufzeit (P1-02):** Node-Sidecar (Empfehlung aus der Analyse) vs. GraalJS vs. Java-Reimplementation. Blocker für P4-01 und teils P1-11.
-2. **Bridge-Protokoll (P1-03):** JSON-RPC über stdio vs. HTTP. Muss vor dem Sidecar-Bau festgelegt werden.
-3. **MCP-Integration (P1-04):** Eigenständiger Java-MCP-Client vs. Nutzung des Spring-AI-Ökosystems.
+1. **Bridge-Protokoll-Details (P1-03):** Framing ist entschieden (JSON-RPC 2.0, Newline-delimited über stdio); offen: Methoden-Katalog, Tool-Schema-Übertragung, Fehler-/Timeout-Semantik, Restart-Policy.
+2. **MCP-Integration (P1-04):** Eigenständiger Java-MCP-Client vs. Nutzung des Spring-AI-Ökosystems.
+
+> Die Plugin-Laufzeit-Entscheidung (Node-Sidecar vs. GraalJS vs. Java-Reimplementation) ist getroffen: **Node-Sidecar**, siehe [ADR-0001](adr/0001-node-sidecar-plugin-runtime.md).
 
 ## Definition of Done (Paritäts-Kriterien)
 
@@ -115,7 +116,7 @@ Ein Baustein gilt als paritätisch, wenn:
 
 ## Nächste Schritte
 
-1. **P1-02** Architektur-Entscheidung treffen (Node-Sidecar bestätigen) → dann **P1-03** Bridge-Protokoll spezifizieren.
+1. **P1-03** Bridge-Protokoll vollständig spezifizieren und die Node-Sidecar-Bridge zu einem verwaltbaren Dienst ausbauen (Start/Stop/Restart, Timeouts, Tool-Registrierung).
 2. **P1-04** MCP-Client anbinden (unabhängig von JS, sofort möglich).
 3. **P1-05/06** Web-Tools + `apply_patch` als Kern-Tools ergänzen.
 4. **P1-09** Session-Konzept auf der H2-Persistenz aufbauen.
