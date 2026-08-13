@@ -1,6 +1,6 @@
 # JClaw → OpenClaw-Parität: Roadmap
 
-Stand: 2026-08-12 · Basis: `docs/openclaw-compat.md` (Formatanalyse) · Ziel: **100 % Parität** zu OpenClaw.
+Stand: 2026-08-13 · Basis: `docs/openclaw-compat.md` (Formatanalyse) · Ziel: **100 % Parität** zu OpenClaw.
 
 ## Status-Legende
 
@@ -44,7 +44,7 @@ Agent-Kern-Fähigkeiten, die OpenClaw zusätzlich bietet und die ohne JS möglic
 |---|---|---|---|---|
 | P1-01 | Plugin Control-Plane | Manifeste lesen/validieren (`openclaw.plugin.json` + Agent-Plugins/Codex/Claude/Cursor), ohne Codeausführung; `GET /api/v1/plugins` | 🔴 | ✅ |
 | P1-02 | Architektur-Entscheidung | **Node-Sidecar bestätigt** (JSON-RPC 2.0 über stdio). Spike validiert Java ↔ Node-Kommunikation. Siehe [ADR-0001](adr/0001-node-sidecar-plugin-runtime.md) | 🔴 | ✅ |
-| P1-03 | Bridge-Protokoll | Vollständige JSON-RPC-Spezifikation (Tool-/Hook-/Command-Registrierung, Ergebnis-Rückgabe). Framing liegt mit `JsonRpcLineCodec`/`NodeSidecarBridge` vor | 🔴 | 🔵 |
+| P1-03 | Bridge-Protokoll | Vollständige JSON-RPC-Spezifikation (Framing, Methoden-Katalog, Fehlercodes, Timeouts, Restart) — [bridge-protocol.md](bridge-protocol.md); Bridge als verwaltbarer Dienst (Handshake, Call-/Ready-Timeout, `restart()`) | 🔴 | ✅ |
 | P1-04 | MCP-Client | `mcp.servers`-Unterstützung: externe Model Context Protocol-Server als Tools integrieren | 🔴 | ⬜ |
 | P1-05 | Web-Tools | `web_fetch` (mit `allowedDomains`-Policy) und `web_search` | 🟡 | ⬜ |
 | P1-06 | Kern-Tool: Patch | `apply_patch` für strukturierte Datei-Änderungen | 🟡 | ⬜ |
@@ -99,10 +99,9 @@ OpenClaw-Kernfeature: Nachrichten von/nach externen Plattformen.
 
 ## Offene Architektur-Entscheidungen
 
-1. **Bridge-Protokoll-Details (P1-03):** Framing ist entschieden (JSON-RPC 2.0, Newline-delimited über stdio); offen: Methoden-Katalog, Tool-Schema-Übertragung, Fehler-/Timeout-Semantik, Restart-Policy.
-2. **MCP-Integration (P1-04):** Eigenständiger Java-MCP-Client vs. Nutzung des Spring-AI-Ökosystems.
+1. **MCP-Integration (P1-04):** Eigenständiger Java-MCP-Client vs. Nutzung des Spring-AI-Ökosystems.
 
-> Die Plugin-Laufzeit-Entscheidung (Node-Sidecar vs. GraalJS vs. Java-Reimplementation) ist getroffen: **Node-Sidecar**, siehe [ADR-0001](adr/0001-node-sidecar-plugin-runtime.md).
+> Die Plugin-Laufzeit-Entscheidung (Node-Sidecar vs. GraalJS vs. Java-Reimplementation) ist getroffen: **Node-Sidecar**, siehe [ADR-0001](adr/0001-node-sidecar-plugin-runtime.md). Das Bridge-Protokoll ist vollständig spezifiziert (siehe [bridge-protocol.md](bridge-protocol.md), P1-03).
 
 ## Definition of Done (Paritäts-Kriterien)
 
@@ -116,7 +115,6 @@ Ein Baustein gilt als paritätisch, wenn:
 
 ## Nächste Schritte
 
-1. **P1-03** Bridge-Protokoll vollständig spezifizieren und die Node-Sidecar-Bridge zu einem verwaltbaren Dienst ausbauen (Start/Stop/Restart, Timeouts, Tool-Registrierung).
-2. **P1-04** MCP-Client anbinden (unabhängig von JS, sofort möglich).
-3. **P1-05/06** Web-Tools + `apply_patch` als Kern-Tools ergänzen.
-4. **P1-09** Session-Konzept auf der H2-Persistenz aufbauen.
+1. **P1-04** MCP-Client anbinden (unabhängig von JS, sofort möglich).
+2. **P1-05/06** Web-Tools + `apply_patch` als Kern-Tools ergänzen.
+3. **P1-09** Session-Konzept auf der H2-Persistenz aufbauen.

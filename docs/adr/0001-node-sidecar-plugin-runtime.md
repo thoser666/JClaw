@@ -60,12 +60,13 @@ Die Bridge wird als eigenständige, schwach gekoppelte Komponente aufgebaut (sie
 - **Positiv:** 1:1-Plugin-Parität, Isolation, Wartbarkeit, klare Schnittstelle (JSON-RPC).
 - **Negativ:** Node.js-Runtime muss dokumentiert und vorausgesetzt werden; Prozess-Lebenszyklus- und Fehlerbehandlung (Restart, Timeouts, Backpressure) müssen im Bridge-Code geführt werden.
 
-## Validierung (Feasibility-Spike)
+## Validierung (Feasibility-Spike → P1-03)
 
-Die Entscheidung ist durch einen lauffähigen Spike validiert:
+Die Entscheidung ist durch einen lauffähigen Spike validiert und in **P1-03** zum vollständigen Bridge-Protokoll ausgebaut:
 
-- `biz.brumm.infrastructure.sidecar.JsonRpcMessage` / `JsonRpcLineCodec` — JSON-RPC-2.0-Framing (pure Java, unit-getestet).
-- `biz.brumm.infrastructure.sidecar.NodeSidecarBridge` — startet `node -e <script>`, sendet Aufrufe über stdin, liest Antworten über stdout, beendet den Prozess sauber.
+- `biz.brumm.infrastructure.sidecar.JsonRpcMessage` / `JsonRpcLineCodec` — JSON-RPC-2.0-Framing (NDJSON, strukturierte Fehler, Notifications; pure Java, unit-getestet).
+- `biz.brumm.infrastructure.sidecar.NodeSidecarBridge` — verwalteter Dienst: startet `node -e <script>`, Handshake über `sidecar.ready`, async Reader-Thread mit id-basiertem Dispatch, Call-/Ready-Timeout (`SidecarTimeoutException`), strukturierte Fehler (`SidecarCallException`), `restart()`/`close()` mit Graceful-Shutdown.
+- Protokoll-Spezifikation: [docs/bridge-protocol.md](../bridge-protocol.md).
 - Tests: `JsonRpcLineCodecTest` (Codec) und `NodeSidecarBridgeTest` (Integration mit echtem Node.js; übersprungen, wenn Node nicht verfügbar).
 
-Damit ist die zentrale Risikofrage (Java ↔ Node über JSON-RPC/stdio funktioniert) beantwortet; P1-03 spezifiziert darauf aufbauend das vollständige Bridge-Protokoll.
+Damit ist die zentrale Risikofrage (Java ↔ Node über JSON-RPC/stdio funktioniert) beantwortet; P4-01 baut die eigentliche Plugin-Laufzeit auf der Bridge auf.

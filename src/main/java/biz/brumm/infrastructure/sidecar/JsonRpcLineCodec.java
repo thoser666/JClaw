@@ -8,7 +8,7 @@ import tools.jackson.databind.node.ObjectNode;
 /**
  * Codiert/decodiert JSON-RPC-2.0-Nachrichten als Newline-delimited JSON (eine Nachricht
  * pro Zeile). Dieses Framing ist die Basis des Bridge-Protokolls zwischen dem Java-Kern
- * und dem Node-Sidecar (siehe ADR-0001).
+ * und dem Node-Sidecar (siehe ADR-0001 und {@code docs/bridge-protocol.md}).
  */
 public final class JsonRpcLineCodec {
 
@@ -32,7 +32,7 @@ public final class JsonRpcLineCodec {
             node.set("result", message.result());
         }
         if (message.error() != null) {
-            node.put("error", message.error());
+            node.set("error", message.error());
         }
         return objectMapper.writeValueAsString(node) + "\n";
     }
@@ -52,7 +52,7 @@ public final class JsonRpcLineCodec {
         String method = object.hasNonNull("method") ? object.get("method").asString() : null;
         JsonNode params = object.get("params");
         JsonNode result = object.get("result");
-        String error = object.hasNonNull("error") ? object.get("error").asString() : null;
+        JsonNode error = object.get("error");
         return new JsonRpcMessage(jsonrpc, id, method, params, result, error);
     }
 }

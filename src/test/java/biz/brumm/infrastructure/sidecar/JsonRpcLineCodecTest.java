@@ -43,10 +43,23 @@ class JsonRpcLineCodecTest {
 
     @Test
     void encodeErrorRoundTrips() {
-        JsonRpcMessage decoded = codec.decode(codec.encode(JsonRpcMessage.error(9, "kaputt")).strip());
+        JsonRpcMessage decoded = codec.decode(codec.encode(JsonRpcMessage.error(9, -32002, "kaputt")).strip());
 
-        assertThat(decoded.error()).isEqualTo("kaputt");
+        assertThat(decoded.errorCode()).isEqualTo(-32002);
+        assertThat(decoded.errorMessage()).isEqualTo("kaputt");
         assertThat(decoded.result()).isNull();
+    }
+
+    @Test
+    void encodeNotificationRoundTrips() {
+        ObjectNode params = objectMapper.createObjectNode().put("version", "1.0.0");
+
+        JsonRpcMessage decoded = codec.decode(codec.encode(JsonRpcMessage.notification("sidecar.ready", params)).strip());
+
+        assertThat(decoded.id()).isEqualTo(-1);
+        assertThat(decoded.isRequest()).isTrue();
+        assertThat(decoded.isNotification()).isTrue();
+        assertThat(decoded.params().get("version").asString()).isEqualTo("1.0.0");
     }
 
     @Test

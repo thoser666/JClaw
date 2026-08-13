@@ -4,7 +4,7 @@ JClaw ist ein autonomer, hochgradig strukturierter Software-Agent. Das Projekt i
 
 Die Anwendung ist strikt nach den Prinzipien der **Hexagonalen Architektur** (Ports and Adapters) aufgebaut, um die Kern-Domainlogik vollständig von Infrastruktur-Entscheidungen (wie dem spezifischen KI-Provider oder Web-Frameworks) zu entkoppeln.
 
-Der Weg zur **100 %-Parität mit OpenClaw** ist in der [Paritäts-Roadmap](docs/parity-roadmap.md) dokumentiert; die Formatanalyse dazu liegt in [docs/openclaw-compat.md](docs/openclaw-compat.md), getroffene Architektur-Entscheidungen in `docs/adr/` (z. B. [ADR-0001 Node-Sidecar](docs/adr/0001-node-sidecar-plugin-runtime.md)).
+Der Weg zur **100 %-Parität mit OpenClaw** ist in der [Paritäts-Roadmap](docs/parity-roadmap.md) dokumentiert; die Formatanalyse dazu liegt in [docs/openclaw-compat.md](docs/openclaw-compat.md), getroffene Architektur-Entscheidungen in `docs/adr/` (z. B. [ADR-0001 Node-Sidecar](docs/adr/0001-node-sidecar-plugin-runtime.md)) und die JSON-RPC-Spezifikation für den Sidecar in [docs/bridge-protocol.md](docs/bridge-protocol.md).
 
 ## Tech Stack
 
@@ -35,6 +35,7 @@ Das Projekt folgt der hexagonalen Struktur unter dem Package-Stamm `biz.brumm`:
 * **Skills (OpenClaw/AgentSkills-Format):** Skills aus dem konfigurierten Verzeichnis (`SKILL.md` mit YAML-Frontmatter) werden in den System-Prompt injiziert, sobald sie per `jclaw.agent.skills.enabled` aktiviert sind.
 * **Konversations-Memory:** Über eine optionale `contextId` wird der Gesprächsverlauf (Message-Window mit begrenzter Nachrichtenanzahl) pro Kontext gespeichert und bei Folgeanfragen wieder eingespielt. Die Nachrichten werden persistent in einer H2-Datei-Datenbank abgelegt (`./data/jclaw.mv.db`) und überleben so App-Neustarts.
 * **Plugins (Control-Plane):** Plugin-Manifeste im OpenClaw-Format (`openclaw.plugin.json`) sowie kompatible fremde Bundles (Agent Plugins, Codex, Claude, Cursor) werden gelesen und ohne Codeausführung validiert (Pflichtfelder, Schema-Struktur).
+* **Node-Sidecar-Bridge (P1-03):** Verwaltete JSON-RPC-Bridge zu einem Node.js-Sidecar-Prozess (Handshake, Call-/Ready-Timeout, strukturierte Fehler, Restart) — Grundlage für die Plugin-Laufzeit in P4-01. Spezifikation: [docs/bridge-protocol.md](docs/bridge-protocol.md).
 * **Fehlerbehandlung:** Ein globaler `@RestControllerAdvice` liefert bei ungültigen Anfragen (z. B. leerem Prompt) eine 400-Antwort mit Fehlermeldung.
 
 ## Voraussetzungen
