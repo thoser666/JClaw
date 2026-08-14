@@ -1,6 +1,6 @@
 # JClaw → OpenClaw-Parität: Roadmap
 
-Stand: 2026-08-13 · Basis: `docs/openclaw-compat.md` (Formatanalyse) · Ziel: **100 % Parität** zu OpenClaw.
+Stand: 2026-08-14 · Basis: `docs/openclaw-compat.md` (Formatanalyse) · Ziel: **100 % Parität** zu OpenClaw.
 
 ## Status-Legende
 
@@ -46,7 +46,7 @@ Agent-Kern-Fähigkeiten, die OpenClaw zusätzlich bietet und die ohne JS möglic
 | P1-02 | Architektur-Entscheidung | **Node-Sidecar bestätigt** (JSON-RPC 2.0 über stdio). Spike validiert Java ↔ Node-Kommunikation. Siehe [ADR-0001](adr/0001-node-sidecar-plugin-runtime.md) | 🔴 | ✅ |
 | P1-03 | Bridge-Protokoll | Vollständige JSON-RPC-Spezifikation (Framing, Methoden-Katalog, Fehlercodes, Timeouts, Restart) — [bridge-protocol.md](bridge-protocol.md); Bridge als verwaltbarer Dienst (Handshake, Call-/Ready-Timeout, `restart()`) | 🔴 | ✅ |
 | P1-04 | MCP-Client | `mcp.servers`-Unterstützung: externe Model Context Protocol-Server als Tools integrieren (`jclaw.mcp.servers.*`, HTTP + STDIO, Deny-by-Default) | 🔴 | ✅ |
-| P1-05 | Web-Tools | `web_fetch` (mit `allowedDomains`-Policy) und `web_search` | 🟡 | ⬜ |
+| P1-05 | Web-Tools | `web_fetch` (mit `allowedDomains`-Policy) und `web_search` | 🟡 | ✅ |
 | P1-06 | Kern-Tool: Patch | `apply_patch` für strukturierte Datei-Änderungen | 🟡 | ⬜ |
 | P1-07 | Kern-Tool: Agent | `spawn_agent` / Multi-Agent-Subprozesse | 🟢 | ⬜ |
 | P1-08 | Tool-Policies | Allow-/Denylisten je Agent (`tools.allow`), `toolMetadata.autoApproved` | 🟡 | ⬜ |
@@ -101,6 +101,8 @@ OpenClaw-Kernfeature: Nachrichten von/nach externen Plattformen.
 
 > **MCP-Integration (P1-04) getroffen:** Nutzung des **Spring-AI-Ökosystems** (`spring-ai-starter-mcp-client` + `io.modelcontextprotocol.sdk`). Eigene `McpToolRegistry` mit `jclaw.mcp.servers.*`-Konfiguration (HTTP/STDIO, Deny-by-Default).
 
+> **Web-Tools (P1-05) getroffen:** `web_fetch` mit `allowedDomains`-Policy (Subdomains erlaubt, nur http/https, Größenlimit) und `web_search` über einen konfigurierbaren Such-Endpoint (Standard: DuckDuckGo Instant Answer, `jclaw.agent.webtool.search-endpoint`). Beide sind Deny-by-Default (`jclaw.agent.webtool.enabled`).
+
 > Die Plugin-Laufzeit-Entscheidung (Node-Sidecar vs. GraalJS vs. Java-Reimplementation) ist getroffen: **Node-Sidecar**, siehe [ADR-0001](adr/0001-node-sidecar-plugin-runtime.md). Das Bridge-Protokoll ist vollständig spezifiziert (siehe [bridge-protocol.md](bridge-protocol.md), P1-03).
 
 ## Definition of Done (Paritäts-Kriterien)
@@ -115,5 +117,5 @@ Ein Baustein gilt als paritätisch, wenn:
 
 ## Nächste Schritte
 
-1. **P1-05/06** Web-Tools + `apply_patch` als Kern-Tools ergänzen.
+1. **P1-06** `apply_patch` als Kern-Tool ergänzen.
 2. **P1-09** Session-Konzept auf der H2-Persistenz aufbauen.

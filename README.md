@@ -78,6 +78,12 @@ Einstellungen in `src/main/resources/application.properties`:
 | `jclaw.mcp.servers.<name>.command` | `-` | Befehl eines STDIO-MCP-Servers |
 | `jclaw.mcp.servers.<name>.args` | `-` | Argumente des STDIO-Befehls |
 | `jclaw.mcp.servers.<name>.env` | `-` | Umgebungsvariablen des STDIO-Befehls |
+| `jclaw.agent.webtool.enabled` | `false` | Schaltet die Web-Werkzeuge frei (nur `true` registriert sie, Deny-by-Default) |
+| `jclaw.agent.webtool.allowed-domains` | `-` (leer) | Erlaubte Domains für `web_fetch` (inkl. Subdomains; leer = kein Abruf erlaubt) |
+| `jclaw.agent.webtool.search-endpoint` | `https://api.duckduckgo.com` | Basis-URL des Such-Endpoints für `web_search` |
+| `jclaw.agent.webtool.fetch-timeout-seconds` | `10` | Timeout für Abrufe und Suchen |
+| `jclaw.agent.webtool.max-fetch-bytes` | `200000` | Maximale Größe einer abgerufenen Antwort |
+| `jclaw.agent.webtool.max-search-results` | `5` | Maximale Anzahl von Treffern pro Suche |
 
 ## Skills
 
@@ -159,6 +165,22 @@ jclaw.mcp.servers.linter.args=-y, @modelcontextprotocol/server-everything
 * Pro Server muss genau eines von `url` oder `command` gesetzt sein.
 * Die Modell-seitigen Tool-Namen werden mit dem Server-Namen präfigiert (`<server>_<tool>`); Zeichen außerhalb von `[a-zA-Z0-9_-]` werden durch `_` ersetzt.
 * Scheitert eine Verbindung, startet die Anwendung mit einer Fehlermeldung (Fail-Fast).
+
+## Web-Werkzeuge
+
+Sobald `jclaw.agent.webtool.enabled=true` gesetzt ist, erhält der Agent die Werkzeuge `web_fetch` und `web_search`:
+
+```properties
+jclaw.agent.webtool.enabled=true
+jclaw.agent.webtool.allowed-domains=example.com, docs.spring.io
+jclaw.agent.webtool.max-search-results=5
+```
+
+* **`web_fetch`** lädt den Inhalt einer Webseite und liefert ihn als Text (HTML wird bereinigt, `<script>`/`<style>` entfernt). Aus Sicherheitsgründen sind nur `http`/`https`-URLs erlaubt, deren Host exakt in `jclaw.agent.webtool.allowed-domains` liegt oder eine Subdomain davon ist (`docs.example.com` zählt zu `example.com`). Eine leere Liste blockiert alle Abrufe (Deny-by-Default).
+* **`web_search`** fragt den konfigurierten `jclaw.agent.webtool.search-endpoint` an (Standard: DuckDuckGo Instant Answer API) und liefert Treffer mit Beschreibung und URL. Der Endpoint ist frei ersetzbar.
+* Große Antworten werden auf `jclaw.agent.webtool.max-fetch-bytes` begrenzt; Abrufe und Suchen brechen nach `jclaw.agent.webtool.fetch-timeout-seconds` ab.
+
+**Sicherheitshinweis:** `web_fetch` kann interne Adressen ansprechen (SSRF-Gefahr). Aktivieren Sie nur vertrauenswürdige Domains.
 
 ## Persistenz
 
