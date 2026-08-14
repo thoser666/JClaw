@@ -97,6 +97,23 @@ OpenClaw-Kernfeature: Nachrichten von/nach externen Plattformen.
 
 ---
 
+## Release-Plan
+
+Die Bausteine werden nicht einzeln, sondern in Versionen mit einem in sich geschlossenen, testbaren Ergebnis gebündelt. Die Reihenfolge folgt den Prioritäten (🔴 zuerst) und den Abhängigkeiten. Bis zur vollen Parität gilt SemVer (`0.x`); `1.0.0` = 100 % Parität.
+
+| Version | Thema | Bausteine | Ziel / Wert |
+|---|---|---|---|
+| **0.1.0** | Agent-Kern | P1-06 `apply_patch`, P1-08 Tool-Policies, P1-09 Session-Konzept | Verlässlicher Einzel-Agent mit Policy- und Session-Modell |
+| **0.2.0** | Konfiguration & Gateway | P2-01 JSON5-Konfig, P2-02 Schema-Validierung, P2-03 Hot-Reload, P2-04 Gateway-Steuerung, P2-06 Auth | Steuerungsebene als Anker für Hooks, Cron und Channels |
+| **0.3.0** | Multi-Agent & Plugins | P1-07 `spawn_agent`, P4-01 Plugin-Laufzeit, P4-04 Provider-Abstraktion, P1-12 Cron | OpenClaw-Parität beim Agent-Verhalten |
+| **0.4.0** | Channels | P3-01 Channel-API, P3-02 Telegram, P3-03 Slack, P3-04 Discord, P2-05 Control-UI | Nutzbares Multi-Plattform-Produkt |
+| **1.0.0** | 100 % Parität | P1-11 Hooks, P1-10 Compaction, P4-02 Memory, P4-03 Media, P4-05 Paritäts-Testsuite, restliche Channels | Feature-Parität, erste stabile Version |
+
+Anmerkungen:
+
+- `0.1.0-SNAPSHOT` ist die aktuelle Entwicklungsversion (siehe `pom.xml`); abgeschlossene Versionen werden als Release getaggt.
+- Abhängigkeiten: P1-12 (Cron) setzt das Session-Konzept (P1-09) und das Gateway voraus, P4-01 setzt die Bridge (P1-03) voraus, Channels setzen die Gateway-Steuerung (P2-04) voraus.
+
 ## Offene Architektur-Entscheidungen
 
 > **MCP-Integration (P1-04) getroffen:** Nutzung des **Spring-AI-Ökosystems** (`spring-ai-starter-mcp-client` + `io.modelcontextprotocol.sdk`). Eigene `McpToolRegistry` mit `jclaw.mcp.servers.*`-Konfiguration (HTTP/STDIO, Deny-by-Default).
