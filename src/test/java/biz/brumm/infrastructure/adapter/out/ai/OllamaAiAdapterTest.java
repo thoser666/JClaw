@@ -7,6 +7,9 @@ import biz.brumm.domain.port.out.AgentTool;
 import biz.brumm.domain.service.AgentLoopLimitExceededException;
 import biz.brumm.infrastructure.adapter.out.ai.tool.CalculatorTool;
 import biz.brumm.infrastructure.adapter.out.ai.tool.DateTimeTool;
+import biz.brumm.infrastructure.mcp.McpToolRegistry;
+import io.modelcontextprotocol.client.McpSyncClient;
+import io.modelcontextprotocol.spec.McpSchema;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -24,15 +27,19 @@ import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.model.Generation;
 import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.ai.model.tool.ToolCallingChatOptions;
 import org.springframework.ai.model.tool.ToolCallingManager;
 import org.springframework.ai.model.tool.ToolExecutionResult;
 import org.springframework.ai.ollama.api.OllamaChatOptions;
+import org.springframework.beans.factory.ObjectProvider;
 
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -46,6 +53,9 @@ class OllamaAiAdapterTest {
     @Mock
     private ToolCallingManager toolCallingManager;
 
+    @Mock
+    private ObjectProvider<McpToolRegistry> mcpToolRegistryProvider;
+
     private static final String TOOL_CALL_ID = "call_123";
 
     private OllamaAiAdapter adapter(List<AgentTool> tools) {
@@ -54,7 +64,7 @@ class OllamaAiAdapterTest {
 
     private OllamaAiAdapter adapter(List<AgentTool> tools, ChatMemory memory) {
         when(chatModel.getOptions()).thenReturn(OllamaChatOptions.builder().model("qwen3:8b").build());
-        return new OllamaAiAdapter(chatModel, toolCallingManager, tools, memory);
+        return new OllamaAiAdapter(chatModel, toolCallingManager, tools, mcpToolRegistryProvider, memory);
     }
 
     private MessageWindowChatMemory newMemory() {
@@ -207,6 +217,42 @@ class OllamaAiAdapterTest {
                 .stream().map(Message::getText).toList();
         assertThat(secondPromptTexts).doesNotContain("Frage A");
         assertThat(memory.get("ctx-a")).extracting(Message::getText).containsExactly("Frage A", "Antwort A");
+    }
+
+    @Test
+    void executeIncludesMcpToolCallbacksInPromptOptions() {
+        McpToolRegistry registry = registryWithMcpTool();
+        when(mcpToolRegistryProvider.getIfAvailable()).thenReturn(registry);
+        when(chatModel.call(any(Prompt.class))).thenReturn(finalResponse("fertig"));
+
+        OllamaAiAdapter adapter = adapter(List.of(new DateTimeTool()));
+        adapter.execute(new AgentCommand("Rechne 2+3", null), "System", 5);
+
+        ArgumentCaptor<Prompt> captor = ArgumentCaptor.forClass(Prompt.class);
+        verify(chatModel).call(captor.capture());
+        ToolCallingChatOptions options = (ToolCallingChatOptions) captor.getValue().getOptions();
+        List<String> names = options.getToolCallbacks().stream()
+                .map(callback -> callback.getToolDefinition().name())
+                .toList();
+        assertThat(names).containsExactly("getCurrentDateTime", "math-server_add");
+    }
+
+    private McpToolRegistry registryWithMcpTool() {
+        McpSyncClient client = mock(McpSyncClient.class);
+        McpSchema.Implementation serverInfo = new McpSchema.Implementation("math-server", "1.0.0");
+        when(client.getCurrentInitializationResult())
+                .thenReturn(new McpSchema.InitializeResult("2025-03-26",
+                        McpSchema.ServerCapabilities.builder().tools(true).build(), serverInfo, null));
+        when(client.getClientInfo()).thenReturn(new McpSchema.Implementation("jclaw", "0.0.1"));
+        when(client.getClientCapabilities()).thenReturn(McpSchema.ClientCapabilities.builder().build());
+        McpSchema.Tool addTool = McpSchema.Tool.builder()
+                .name("add")
+                .title("add")
+                .description("Adds two numbers")
+                .inputSchema(new McpSchema.JsonSchema("object", Map.of(), List.of(), false, null, null))
+                .build();
+        when(client.listTools()).thenReturn(new McpSchema.ListToolsResult(List.of(addTool), null));
+        return new McpToolRegistry(List.of(client));
     }
 
     private AssistantMessage toolCallMessage() {

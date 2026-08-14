@@ -6,6 +6,7 @@ import biz.brumm.domain.model.ToolInvocation;
 import biz.brumm.domain.port.out.AgentTool;
 import biz.brumm.domain.port.out.AiProviderPort;
 import biz.brumm.domain.service.AgentLoopLimitExceededException;
+import biz.brumm.infrastructure.mcp.McpToolRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.memory.ChatMemory;
@@ -23,6 +24,7 @@ import org.springframework.ai.model.tool.ToolCallingManager;
 import org.springframework.ai.model.tool.ToolExecutionResult;
 import org.springframework.ai.support.ToolCallbacks;
 import org.springframework.ai.tool.ToolCallback;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
@@ -40,11 +42,16 @@ public class OllamaAiAdapter implements AiProviderPort {
     private final List<ToolCallback> toolCallbacks;
 
     public OllamaAiAdapter(ChatModel chatModel, ToolCallingManager toolCallingManager, List<AgentTool> tools,
-                           ChatMemory chatMemory) {
+                           ObjectProvider<McpToolRegistry> mcpToolRegistry, ChatMemory chatMemory) {
         this.chatModel = chatModel;
         this.toolCallingManager = toolCallingManager;
         this.chatMemory = chatMemory;
-        this.toolCallbacks = List.of(ToolCallbacks.from(tools.toArray()));
+        List<ToolCallback> callbacks = new ArrayList<>(List.of(ToolCallbacks.from(tools.toArray())));
+        McpToolRegistry registry = mcpToolRegistry.getIfAvailable();
+        if (registry != null) {
+            callbacks.addAll(registry.toolCallbacks());
+        }
+        this.toolCallbacks = List.copyOf(callbacks);
     }
 
     @Override

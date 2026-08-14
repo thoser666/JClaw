@@ -71,6 +71,13 @@ Einstellungen in `src/main/resources/application.properties`:
 | `jclaw.agent.shelltool.workdir` | aktuelles Verzeichnis | Arbeitsverzeichnis, in dem Befehle ausgeführt werden |
 | `jclaw.agent.shelltool.timeout-seconds` | `30` | Maximale Laufzeit eines Befehls |
 | `jclaw.agent.shelltool.max-output-chars` | `10000` | Maximale Zeichenanzahl der zurückgegebenen Ausgabe |
+| `jclaw.mcp.enabled` | `false` | Schaltet die MCP-Integration frei (nur `true` verbindet Server, Deny-by-Default) |
+| `jclaw.mcp.request-timeout` | `60s` | Timeout für Anfragen an MCP-Server |
+| `jclaw.mcp.servers.<name>.url` | `-` | Basis-URL eines HTTP-MCP-Servers (Endpunkt `/mcp` wird angehängt) |
+| `jclaw.mcp.servers.<name>.endpoint` | `/mcp` | MCP-Endpunkt-Pfad für HTTP-Server |
+| `jclaw.mcp.servers.<name>.command` | `-` | Befehl eines STDIO-MCP-Servers |
+| `jclaw.mcp.servers.<name>.args` | `-` | Argumente des STDIO-Befehls |
+| `jclaw.mcp.servers.<name>.env` | `-` | Umgebungsvariablen des STDIO-Befehls |
 
 ## Skills
 
@@ -135,6 +142,23 @@ Sobald `jclaw.agent.shelltool.enabled=true` gesetzt ist, erhält der Agent das W
 * Die Ausgabe wird auf `jclaw.agent.shelltool.max-output-chars` Zeichen gekürzt; auch Exit-Codes werden gemeldet.
 
 **Sicherheitshinweis:** Shell-Ausführung ist mächtig und riskant. Standardmäßig ist das Werkzeug deaktiviert — aktivieren Sie es nur in kontrollierten Umgebungen.
+
+## MCP-Server
+
+Sobald `jclaw.mcp.enabled=true` gesetzt ist, verbindet sich JClaw mit den konfigurierten MCP-Servern (Model Context Protocol) und registriert deren Tools beim Agenten:
+
+```properties
+jclaw.mcp.enabled=true
+jclaw.mcp.servers.filesystem.url=http://localhost:8080
+jclaw.mcp.servers.linter.command=npx
+jclaw.mcp.servers.linter.args=-y, @modelcontextprotocol/server-everything
+```
+
+* **HTTP-Transport:** `url` ist die Basis-URL ohne Pfad; der MCP-Endpunkt (Standard `/mcp`) wird automatisch angehängt und kann per `endpoint` überschrieben werden.
+* **STDIO-Transport:** `command` startet ein ausführbares Skript; `args` und `env` sind optional.
+* Pro Server muss genau eines von `url` oder `command` gesetzt sein.
+* Die Modell-seitigen Tool-Namen werden mit dem Server-Namen präfigiert (`<server>_<tool>`); Zeichen außerhalb von `[a-zA-Z0-9_-]` werden durch `_` ersetzt.
+* Scheitert eine Verbindung, startet die Anwendung mit einer Fehlermeldung (Fail-Fast).
 
 ## Persistenz
 
