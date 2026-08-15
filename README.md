@@ -36,6 +36,7 @@ Das Projekt folgt der hexagonalen Struktur unter dem Package-Stamm `biz.brumm`:
 * **Konversations-Memory:** Über eine optionale `contextId` wird der Gesprächsverlauf (Message-Window mit begrenzter Nachrichtenanzahl) pro Kontext gespeichert und bei Folgeanfragen wieder eingespielt. Die Nachrichten werden persistent in einer H2-Datei-Datenbank abgelegt (`./data/jclaw.mv.db`) und überleben so App-Neustarts.
 * **Plugins (Control-Plane):** Plugin-Manifeste im OpenClaw-Format (`openclaw.plugin.json`) sowie kompatible fremde Bundles (Agent Plugins, Codex, Claude, Cursor) werden gelesen und ohne Codeausführung validiert (Pflichtfelder, Schema-Struktur).
 * **Node-Sidecar-Bridge (P1-03):** Verwaltete JSON-RPC-Bridge zu einem Node.js-Sidecar-Prozess (Handshake, Call-/Ready-Timeout, strukturierte Fehler, Restart) — Grundlage für die Plugin-Laufzeit in P4-01. Spezifikation: [docs/bridge-protocol.md](docs/bridge-protocol.md).
+* **Control-UI (P2-05):** Statische Web-Oberfläche (kein Build-Schritt, keine externen Abhängigkeiten) unter `http://localhost:8080` — Agent-Aufgaben ausführen, Konversationen laden/löschen, Skills und Plugins anzeigen (siehe [Control-UI](#control-ui)).
 * **Fehlerbehandlung:** Ein globaler `@RestControllerAdvice` liefert bei ungültigen Anfragen (z. B. leerem Prompt) eine 400-Antwort mit Fehlermeldung.
 
 ## Voraussetzungen
@@ -335,6 +336,19 @@ Antwort (HTTP 200):
 `DELETE /api/v1/conversations/{contextId}`
 
 Löscht den gesamten gespeicherten Verlauf einer `contextId` (idempotent). Antwort (HTTP 204, ohne Body).
+
+## Control-UI
+
+Unter `http://localhost:8080` liefert Spring Boot eine schlanke Web-Oberfläche (`src/main/resources/static/`) zur Steuerung des Agenten aus — bewusst ohne Build-Schritt und ohne externe CDN-Abhängigkeiten (Vanilla-JS + `fetch`):
+
+| Bereich | Funktion |
+|---|---|
+| **Agent** | Aufgabe + optionale `contextId` eingeben, Ausführung anstoßen; Antwort mit Anzahl der Iterationen und aufklappbaren Tool-Aufrufen |
+| **Konversationen** | Verlauf einer `contextId` laden (als Chat) und löschen |
+| **Skills** | Alle geladenen Skills mit Aktivierungsstatus |
+| **Plugins** | Erkannte Manifeste mit Typ, Version und Validierungsstatus |
+
+Die UI rendert alle Daten ausschließlich über `textContent` (kein `innerHTML`-Einsatz für API-Daten) und zeigt API-Fehler (`{"error": …}`) direkt an. Auf Mobile (≤ 720 px) wechselt das Layout in eine gestapelte Darstellung. Die statischen Ressourcen werden von `ControlUiResourceTest` geprüft.
 
 ## Tests
 

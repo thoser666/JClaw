@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JClaw Control</title>
+    <link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+<div class="layout">
+    <aside class="sidebar">
+        <div class="brand">
+            <span class="brand-mark" aria-hidden="true">JC</span>
+            <div class="brand-text">
+                <span class="brand-name">JClaw</span>
+                <span class="brand-sub">Control-UI</span>
+            </div>
+        </div>
+
+        <nav class="nav" aria-label="Hauptnavigation">
+            <button class="nav-item is-active" type="button" data-panel="agent" aria-current="page">
+                <span class="nav-icon" aria-hidden="true">&#9679;</span> Agent
+            </button>
+            <button class="nav-item" type="button" data-panel="conversations">
+                <span class="nav-icon" aria-hidden="true">&#9776;</span> Konversationen
+            </button>
+            <button class="nav-item" type="button" data-panel="skills">
+                <span class="nav-icon" aria-hidden="true">&#10003;</span> Skills
+            </button>
+            <button class="nav-item" type="button" data-panel="plugins">
+                <span class="nav-icon" aria-hidden="true">&#9632;</span> Plugins
+            </button>
+        </nav>
+
+        <div class="sidebar-footer">v0.1.0-SNAPSHOT</div>
+    </aside>
+
+    <main class="content">
+        <section class="panel is-active" id="panel-agent" aria-labelledby="heading-agent">
+            <header class="panel-header">
+                <h1 id="heading-agent">Agent</h1>
+                <p class="panel-sub">Führt eine Aufgabe über den Agent-Loop aus (inkl. Tool-Calls).</p>
+            </header>
+
+            <form id="task-form" class="card">
+                <div class="field">
+                    <label for="task-prompt">Aufgabe</label>
+                    <textarea id="task-prompt" rows="5" required
+                              placeholder="z. B. Berechne 12 * 7 und schreibe das Ergebnis in ergebnis.txt"></textarea>
+                </div>
+                <div class="field">
+                    <label for="task-context">Kontext-ID <span class="hint">(optional)</span></label>
+                    <input id="task-context" type="text" placeholder="z. B. demo-session" autocomplete="off">
+                </div>
+                <div class="form-actions">
+                    <button class="btn btn-primary" type="submit" id="task-submit">Ausführen</button>
+                </div>
+            </form>
+
+            <div id="task-status" class="status" role="status" aria-live="polite"></div>
+
+            <div id="task-result" class="card result hidden"></div>
+        </section>
+
+        <section class="panel" id="panel-conversations" aria-labelledby="heading-conversations" hidden>
+            <header class="panel-header">
+                <h1 id="heading-conversations">Konversationen</h1>
+                <p class="panel-sub">Nachrichten einer gespeicherten Konversation laden und löschen.</p>
+            </header>
+
+            <form id="conversation-form" class="card">
+                <div class="field">
+                    <label for="conversation-context">Kontext-ID</label>
+                    <input id="conversation-context" type="text" required placeholder="z. B. demo-session" autocomplete="off">
+                </div>
+                <div class="form-actions">
+                    <button class="btn btn-primary" type="submit">Laden</button>
+                    <button class="btn btn-danger" type="button" id="conversation-delete">Löschen</button>
+                </div>
+            </form>
+
+            <div id="conversation-status" class="status" role="status" aria-live="polite"></div>
+
+            <div id="conversation-list" class="thread"></div>
+        </section>
+
+        <section class="panel" id="panel-skills" aria-labelledby="heading-skills" hidden>
+            <header class="panel-header">
+                <h1 id="heading-skills">Skills</h1>
+                <p class="panel-sub">Geladene Skills (AgentSkills-Format) und ihr Aktivierungsstatus.</p>
+            </header>
+            <div id="skills-status" class="status" role="status" aria-live="polite"></div>
+            <div id="skills-list" class="grid"></div>
+        </section>
+
+        <section class="panel" id="panel-plugins" aria-labelledby="heading-plugins" hidden>
+            <header class="panel-header">
+                <h1 id="heading-plugins">Plugins</h1>
+                <p class="panel-sub">Erkannte Plugin-Manifeste (OpenClaw + kompatible Formate).</p>
+            </header>
+            <div id="plugins-status" class="status" role="status" aria-live="polite"></div>
+            <div id="plugins-list" class="grid"></div>
+        </section>
+    </main>
+</div>
+
+<script src="/js/app.js"></script>
+</body>
+</html>
