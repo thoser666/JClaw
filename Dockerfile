@@ -19,8 +19,9 @@ RUN ./mvnw clean package -DskipTests
 FROM eclipse-temurin:25-jre-alpine
 WORKDIR /app
 
-# Das gebaute JAR aus der ersten Stage kopieren
-COPY --from=build /workspace/app/target/jclaw-0.0.1-SNAPSHOT.jar app.jar
+# Das gebaute JAR aus der ersten Stage kopieren (versionsagnostisch, damit
+# Versionsbumps in pom.xml den Docker-Build nicht brechen)
+COPY --from=build /workspace/app/target/jclaw-*.jar app.jar
 
 # Port des Spring-Boot-Webservers freigeben
 EXPOSE 8080

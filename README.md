@@ -47,6 +47,18 @@ Das Projekt folgt der hexagonalen Struktur unter dem Package-Stamm `biz.brumm`:
    ollama pull qwen3:8b
    ```
 
+## Docker
+
+Das Multi-Stage-`Dockerfile` (JDK 25 zum Bauen, schlankes JRE-25-Image zur Laufzeit) erzeugt das Anwendungs-Image selbstständig:
+
+```bash
+docker build -t jclaw .
+docker run --rm -p 8080:8080 jclaw
+```
+
+* Das JAR wird **versionsagnostisch** über ein Wildcard kopiert (`target/jclaw-*.jar`) — ein Versionsbump in `pom.xml` bricht den Docker-Build daher nicht.
+* Über GitHub Actions (`docker-image.yml`) wird das Image bei jedem Push auf `master`/`develop` (und für `v*`-Tags) gebaut und nach `ghcr.io/<owner>/jclaw` gepusht. Lokal geprüft wird das von `DockerfileTest`.
+
 ## Konfiguration
 
 Einstellungen in `src/main/resources/application.properties`:
