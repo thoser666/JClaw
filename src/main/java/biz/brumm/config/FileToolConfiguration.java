@@ -1,5 +1,6 @@
 package biz.brumm.config;
 
+import biz.brumm.infrastructure.adapter.out.ai.tool.ApplyPatchTool;
 import biz.brumm.infrastructure.adapter.out.ai.tool.FileTool;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
@@ -14,5 +15,11 @@ public class FileToolConfiguration {
     @ConditionalOnProperty(prefix = "jclaw.agent.filetool", name = "workdir")
     public FileTool fileTool(FileToolProperties properties) {
         return new FileTool(Path.of(properties.workdir()), properties.effectiveMaxReadBytes());
+    }
+
+    @Bean
+    @ConditionalOnProperty(prefix = "jclaw.agent.filetool", name = "workdir")
+    public ApplyPatchTool applyPatchTool(FileToolProperties properties) {
+        return new ApplyPatchTool(Path.of(properties.workdir()));
     }
 }

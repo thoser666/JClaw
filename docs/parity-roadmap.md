@@ -1,6 +1,6 @@
 # JClaw → OpenClaw-Parität: Roadmap
 
-Stand: 2026-08-14 · Basis: `docs/openclaw-compat.md` (Formatanalyse) · Ziel: **100 % Parität** zu OpenClaw.
+Stand: 2026-08-15 · Basis: `docs/openclaw-compat.md` (Formatanalyse) · Ziel: **100 % Parität** zu OpenClaw.
 
 ## Status-Legende
 
@@ -47,7 +47,7 @@ Agent-Kern-Fähigkeiten, die OpenClaw zusätzlich bietet und die ohne JS möglic
 | P1-03 | Bridge-Protokoll | Vollständige JSON-RPC-Spezifikation (Framing, Methoden-Katalog, Fehlercodes, Timeouts, Restart) — [bridge-protocol.md](bridge-protocol.md); Bridge als verwaltbarer Dienst (Handshake, Call-/Ready-Timeout, `restart()`) | 🔴 | ✅ |
 | P1-04 | MCP-Client | `mcp.servers`-Unterstützung: externe Model Context Protocol-Server als Tools integrieren (`jclaw.mcp.servers.*`, HTTP + STDIO, Deny-by-Default) | 🔴 | ✅ |
 | P1-05 | Web-Tools | `web_fetch` (mit `allowedDomains`-Policy) und `web_search` | 🟡 | ✅ |
-| P1-06 | Kern-Tool: Patch | `apply_patch` für strukturierte Datei-Änderungen | 🟡 | ⬜ |
+| P1-06 | Kern-Tool: Patch | `apply_patch` für strukturierte Datei-Änderungen | 🟡 | ✅ |
 | P1-07 | Kern-Tool: Agent | `spawn_agent` / Multi-Agent-Subprozesse | 🟢 | ⬜ |
 | P1-08 | Tool-Policies | Allow-/Denylisten je Agent (`tools.allow`), `toolMetadata.autoApproved` | 🟡 | ⬜ |
 | P1-09 | Session-Konzept | Von `contextId` auf Sessions erweitern (Reset-Strategien `daily`/`idle`, Thread-Bindings, `dmScope`) | 🟡 | ⬜ |
@@ -103,7 +103,7 @@ Die Bausteine werden nicht einzeln, sondern in Versionen mit einem in sich gesch
 
 | Version | Thema | Bausteine | Ziel / Wert |
 |---|---|---|---|
-| **0.1.0** | Agent-Kern | P1-06 `apply_patch`, P1-08 Tool-Policies, P1-09 Session-Konzept | Verlässlicher Einzel-Agent mit Policy- und Session-Modell |
+| **0.1.0** | Agent-Kern | ~~P1-06~~ ✅ `apply_patch`, P1-08 Tool-Policies, P1-09 Session-Konzept | Verlässlicher Einzel-Agent mit Policy- und Session-Modell |
 | **0.2.0** | Konfiguration & Gateway | P2-01 JSON5-Konfig, P2-02 Schema-Validierung, P2-03 Hot-Reload, P2-04 Gateway-Steuerung, P2-06 Auth | Steuerungsebene als Anker für Hooks, Cron und Channels |
 | **0.3.0** | Multi-Agent & Plugins | P1-07 `spawn_agent`, P4-01 Plugin-Laufzeit, P4-04 Provider-Abstraktion, P1-12 Cron | OpenClaw-Parität beim Agent-Verhalten |
 | **0.4.0** | Channels | P3-01 Channel-API, P3-02 Telegram, P3-03 Slack, P3-04 Discord, P2-05 Control-UI | Nutzbares Multi-Plattform-Produkt |
@@ -134,5 +134,5 @@ Ein Baustein gilt als paritätisch, wenn:
 
 ## Nächste Schritte
 
-1. **P1-06** `apply_patch` als Kern-Tool ergänzen.
+1. **P1-08** Tool-Policies (Allow-/Denylisten je Agent, `toolMetadata.autoApproved`).
 2. **P1-09** Session-Konzept auf der H2-Persistenz aufbauen.

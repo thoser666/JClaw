@@ -1,5 +1,6 @@
 package biz.brumm.config;
 
+import biz.brumm.infrastructure.adapter.out.ai.tool.ApplyPatchTool;
 import biz.brumm.infrastructure.adapter.out.ai.tool.FileTool;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -17,12 +18,16 @@ class FileToolConfigurationTest {
     void fileToolRegisteredWhenWorkdirConfigured() {
         contextRunner
                 .withPropertyValues("jclaw.agent.filetool.workdir=./workspace")
-                .run(context -> assertThat(context).hasSingleBean(FileTool.class));
+                .run(context -> assertThat(context)
+                        .hasSingleBean(FileTool.class)
+                        .hasSingleBean(ApplyPatchTool.class));
     }
 
     @Test
     void fileToolAbsentWithoutWorkdir() {
-        contextRunner.run(context -> assertThat(context).doesNotHaveBean(FileTool.class));
+        contextRunner.run(context -> assertThat(context)
+                .doesNotHaveBean(FileTool.class)
+                .doesNotHaveBean(ApplyPatchTool.class));
     }
 
     @Configuration(proxyBeanMethods = false)

@@ -30,7 +30,7 @@ Das Projekt folgt der hexagonalen Struktur unter dem Package-Stamm `biz.brumm`:
 * **Agent-Loop mit Tool-Nutzung:** Das LLM kann in mehreren Iterationen Werkzeuge aufrufen und deren Ergebnisse verarbeiten, bis eine finale Antwort vorliegt oder das Iterationslimit erreicht ist.
   * `CalculatorTool` (`calculate`) – sicherer Rechner mit eigenem, minimalem Ausdrucks-Parser.
   * `DateTimeTool` (`getCurrentDateTime`) – aktuelle Uhrzeit/Datum mit optionaler Zeitzone.
-  * `FileTool` (`readFile`, `listDirectory`, `writeFile`, `glob`, `grep`) – Dateizugriff und -suche innerhalb eines konfigurierten Arbeitsverzeichnisses (optional, s. u.).
+  * `FileTool` (`readFile`, `listDirectory`, `writeFile`, `glob`, `grep`) und `apply_patch` – Dateizugriff, -suche und -änderung innerhalb eines konfigurierten Arbeitsverzeichnisses (optional, s. u.).
   * `ShellTool` (`runCommand`) – führt Shell-Befehle im Arbeitsverzeichnis aus (optional, s. u.).
 * **Skills (OpenClaw/AgentSkills-Format):** Skills aus dem konfigurierten Verzeichnis (`SKILL.md` mit YAML-Frontmatter) werden in den System-Prompt injiziert, sobald sie per `jclaw.agent.skills.enabled` aktiviert sind.
 * **Konversations-Memory:** Über eine optionale `contextId` wird der Gesprächsverlauf (Message-Window mit begrenzter Nachrichtenanzahl) pro Kontext gespeichert und bei Folgeanfragen wieder eingespielt. Die Nachrichten werden persistent in einer H2-Datei-Datenbank abgelegt (`./data/jclaw.mv.db`) und überleben so App-Neustarts.
@@ -65,7 +65,7 @@ Einstellungen in `src/main/resources/application.properties`:
 | `jclaw.agent.plugins.dir` | `./plugins` | Verzeichnis mit Plugin-Ordnern (Manifeste) |
 | `jclaw.agent.skills.dir` | `./skills` | Verzeichnis mit Skill-Ordnern (`SKILL.md`) |
 | `jclaw.agent.skills.enabled` | `-` (leer) | Namen der zu ladenden Skills (leer = keine Skills aktiv) |
-| `jclaw.agent.filetool.workdir` | `-` (nicht gesetzt) | Arbeitsverzeichnis der Datei-Werkzeuge. Erst wenn gesetzt, werden `readFile`, `listDirectory` und `writeFile` registriert (Deny-by-Default) |
+| `jclaw.agent.filetool.workdir` | `-` (nicht gesetzt) | Arbeitsverzeichnis der Datei-Werkzeuge. Erst wenn gesetzt, werden `readFile`, `listDirectory`, `writeFile`, `glob`, `grep` und `apply_patch` registriert (Deny-by-Default) |
 | `jclaw.agent.filetool.max-read-bytes` | `1048576` (1 MiB) | Maximale Dateigröße, die der Agent lesen darf |
 | `jclaw.agent.shelltool.enabled` | `false` | Schaltet das `runCommand`-Werkzeug frei (nur `true` registriert es, Deny-by-Default) |
 | `jclaw.agent.shelltool.workdir` | aktuelles Verzeichnis | Arbeitsverzeichnis, in dem Befehle ausgeführt werden |
@@ -128,7 +128,7 @@ Die Manifeste werden **ohne Codeausführung** validiert (Control-Plane). Ungült
 
 ## Datei-Werkzeuge
 
-Sobald `jclaw.agent.filetool.workdir` gesetzt ist, erhält der Agent die Werkzeuge `readFile`, `listDirectory`, `writeFile`, `glob` und `grep`:
+Sobald `jclaw.agent.filetool.workdir` gesetzt ist, erhält der Agent die Werkzeuge `readFile`, `listDirectory`, `writeFile`, `glob`, `grep` und `apply_patch`:
 
 * Alle Pfade werden relativ zum Arbeitsverzeichnis aufgelöst.
 * Zugriffe außerhalb des Arbeitsverzeichnisses (Pfad-Traversal, absolute Pfade, `..`) werden mit einer Fehlermeldung abgewiesen.
@@ -138,6 +138,31 @@ Sobald `jclaw.agent.filetool.workdir` gesetzt ist, erhält der Agent die Werkzeu
 * `grep` durchsucht Textdateien (rekursiv in einem Verzeichnis oder eine einzelne Datei) nach einem regulären Ausdruck und liefert `pfad:zeile: inhalt`-Treffer (max. 200).
 
 Ohne gesetztes `workdir` sind die Datei-Werkzeuge nicht aktiv (Deny-by-Default).
+
+### `apply_patch`
+
+`apply_patch` wendet einen Patch im apply_patch-Format (OpenClaw-/Claude-kompatibel) auf Dateien im Arbeitsverzeichnis an. Ein Patch besteht aus Blöcken für Anlegen, Ändern und Löschen:
+
+```text
+*** Begin Patch
+*** Add File: notizen.txt
+Zeile eins
+Zeile zwei
+
+*** Update File: src/Main.java
+@@
+  public static void main(String[] args) {
+-    System.out.println("alt");
++    System.out.println("neu");
+  }
+*** Delete File: veraltet.txt
+*** End Patch
+```
+
+* `*** Add File: <pfad>` legt eine neue Datei an (fehlende Zwischenverzeichnisse werden erzeugt); der Inhalt reicht bis zum nächsten `***`-Block.
+* `*** Update File: <pfad>` ändert eine bestehende Datei über `@@`-Hunks: Zeilen mit Leerzeichen-Präfix sind Kontext (muss im Dateistand vorkommen), `-` entfernt eine Zeile, `+` fügt eine Zeile ein. Mehrere Hunks pro Datei sind erlaubt.
+* `*** Delete File: <pfad>` löscht eine Datei.
+* Der Patch wird **vollständig geparst und geprüft, bevor geschrieben wird** (Alles-oder-nichts): Schlägt z. B. ein Hunk fehl, bleibt der gesamte Dateistand unverändert.
 
 ## Shell-Werkzeug
 
