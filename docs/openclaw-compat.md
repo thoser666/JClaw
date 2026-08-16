@@ -201,6 +201,7 @@ Datei-/Shell-Zugriff (`exec`, `read`/`write`/`glob`/`grep`, `apply_patch`), Web 
 ### Bewertung für JClaw
 - JClaw besitzt bereits Tool-Calling via Spring AI `ToolCallback`s (Kern-Tools `CalculatorTool`, `DateTimeTool`). Kern-Tools sind damit **Java-Reimplementationen** — kein JS nötig.
 - `exec`/Web-Tools benötigen klare Security-Policies (wie OpenClaw: Allowlisten, Zeitouts, Arbeitsverzeichnis-Beschränkung).
+- **Tool-Policies (P1-08, erledigt):** OpenClaws `tools.allow`-Semantik ist als `jclaw.agent.tools.allow`/`.deny` abgebildet (Allow-/Denyliste, Deny-by-Default, Deny schlägt Allow; deaktivierte Tools erscheinen nicht im Tool-Schema des Modells). `toolMetadata.autoApproved` ist mangels Approval-Flows noch ohne Paritätsbezug (relevant erst mit Human-in-the-Loop/Gateway-Auth, P2-06).
 - **MCP-Client**: eigenständig in Java integrierbar (kein Plugin-Problem); mit `mcp.servers`-Abschnitt der Konfig kompatibel machen.
 
 ---

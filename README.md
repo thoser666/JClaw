@@ -38,6 +38,7 @@ Das Projekt folgt der hexagonalen Struktur unter dem Package-Stamm `biz.brumm`:
 * **Node-Sidecar-Bridge (P1-03):** Verwaltete JSON-RPC-Bridge zu einem Node.js-Sidecar-Prozess (Handshake, Call-/Ready-Timeout, strukturierte Fehler, Restart) — Grundlage für die Plugin-Laufzeit in P4-01. Spezifikation: [docs/bridge-protocol.md](docs/bridge-protocol.md).
 * **Control-UI (P2-05):** Statische Web-Oberfläche (kein Build-Schritt, keine externen Abhängigkeiten) unter `http://localhost:8080` — Agent-Aufgaben ausführen, Konversationen laden/löschen, Skills und Plugins anzeigen (siehe [Control-UI](#control-ui)).
 * **Fehlerbehandlung:** Ein globaler `@RestControllerAdvice` liefert bei ungültigen Anfragen (z. B. leerem Prompt) eine 400-Antwort mit Fehlermeldung.
+* **Tool-Policies (P1-08):** Per `jclaw.agent.tools.allow`/`.deny` lassen sich einzelne Werkzeuge für den Agenten freischalten bzw. sperren (Allow-/Denyliste, Deny-by-Default; Deny schlägt Allow). Deaktivierte Werkzeuge werden dem LLM nicht als Tool-Schema angeboten — analog zu OpenClaws `tools.allow`-Policy.
 
 ## Voraussetzungen
 
@@ -97,6 +98,8 @@ Einstellungen in `src/main/resources/application.properties`:
 | `jclaw.agent.webtool.fetch-timeout-seconds` | `10` | Timeout für Abrufe und Suchen |
 | `jclaw.agent.webtool.max-fetch-bytes` | `200000` | Maximale Größe einer abgerufenen Antwort |
 | `jclaw.agent.webtool.max-search-results` | `5` | Maximale Anzahl von Treffern pro Suche |
+| `jclaw.agent.tools.allow` | `-` (leer) | Allowliste der Tool-Namen (`readFile`, `runCommand`, `web_fetch`, MCP-Tools wie `math-server_add`, …). Leer = alle Tools erlaubt; gesetzt = nur die genannten Tools aktiv (Deny-by-Default) |
+| `jclaw.agent.tools.deny` | `-` (leer) | Denyliste der Tool-Namen. Leer = kein Tool gesperrt; **Deny schlägt Allow** |
 
 ## Skills
 

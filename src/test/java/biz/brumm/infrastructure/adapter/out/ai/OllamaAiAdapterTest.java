@@ -4,6 +4,7 @@ import biz.brumm.domain.model.AgentCommand;
 import biz.brumm.domain.model.AgentResponse;
 import biz.brumm.domain.model.ToolInvocation;
 import biz.brumm.domain.port.out.AgentTool;
+import biz.brumm.domain.port.out.ToolPolicy;
 import biz.brumm.domain.service.AgentLoopLimitExceededException;
 import biz.brumm.infrastructure.adapter.out.ai.tool.CalculatorTool;
 import biz.brumm.infrastructure.adapter.out.ai.tool.DateTimeTool;
@@ -63,8 +64,12 @@ class OllamaAiAdapterTest {
     }
 
     private OllamaAiAdapter adapter(List<AgentTool> tools, ChatMemory memory) {
+        return adapter(tools, memory, name -> true);
+    }
+
+    private OllamaAiAdapter adapter(List<AgentTool> tools, ChatMemory memory, ToolPolicy policy) {
         when(chatModel.getOptions()).thenReturn(OllamaChatOptions.builder().model("qwen3:8b").build());
-        return new OllamaAiAdapter(chatModel, toolCallingManager, tools, mcpToolRegistryProvider, memory);
+        return new OllamaAiAdapter(chatModel, toolCallingManager, tools, mcpToolRegistryProvider, memory, policy);
     }
 
     private MessageWindowChatMemory newMemory() {
@@ -235,6 +240,42 @@ class OllamaAiAdapterTest {
                 .map(callback -> callback.getToolDefinition().name())
                 .toList();
         assertThat(names).containsExactly("getCurrentDateTime", "math-server_add");
+    }
+
+    @Test
+    void executeFiltersToolCallbacksAccordingToPolicy() {
+        when(chatModel.call(any(Prompt.class))).thenReturn(finalResponse("fertig"));
+
+        ToolPolicy policy = name -> name.equals("getCurrentDateTime") || name.equals("runCommand");
+        OllamaAiAdapter adapter = adapter(List.of(new DateTimeTool(), new CalculatorTool()), newMemory(), policy);
+        adapter.execute(new AgentCommand("Rechne 2+3", null), "System", 5);
+
+        ArgumentCaptor<Prompt> captor = ArgumentCaptor.forClass(Prompt.class);
+        verify(chatModel).call(captor.capture());
+        ToolCallingChatOptions options = (ToolCallingChatOptions) captor.getValue().getOptions();
+        List<String> names = options.getToolCallbacks().stream()
+                .map(callback -> callback.getToolDefinition().name())
+                .toList();
+        assertThat(names).containsExactly("getCurrentDateTime");
+    }
+
+    @Test
+    void executeAppliesPolicyToMcpToolCallbacks() {
+        McpToolRegistry registry = registryWithMcpTool();
+        when(mcpToolRegistryProvider.getIfAvailable()).thenReturn(registry);
+        when(chatModel.call(any(Prompt.class))).thenReturn(finalResponse("fertig"));
+
+        ToolPolicy policy = name -> name.equals("getCurrentDateTime") && !name.startsWith("math-server");
+        OllamaAiAdapter adapter = adapter(List.of(new DateTimeTool()), newMemory(), policy);
+        adapter.execute(new AgentCommand("Rechne 2+3", null), "System", 5);
+
+        ArgumentCaptor<Prompt> captor = ArgumentCaptor.forClass(Prompt.class);
+        verify(chatModel).call(captor.capture());
+        ToolCallingChatOptions options = (ToolCallingChatOptions) captor.getValue().getOptions();
+        List<String> names = options.getToolCallbacks().stream()
+                .map(callback -> callback.getToolDefinition().name())
+                .toList();
+        assertThat(names).containsExactly("getCurrentDateTime");
     }
 
     private McpToolRegistry registryWithMcpTool() {

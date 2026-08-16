@@ -5,6 +5,7 @@ import biz.brumm.domain.model.AgentResponse;
 import biz.brumm.domain.model.ToolInvocation;
 import biz.brumm.domain.port.out.AgentTool;
 import biz.brumm.domain.port.out.AiProviderPort;
+import biz.brumm.domain.port.out.ToolPolicy;
 import biz.brumm.domain.service.AgentLoopLimitExceededException;
 import biz.brumm.infrastructure.mcp.McpToolRegistry;
 import org.slf4j.Logger;
@@ -42,7 +43,8 @@ public class OllamaAiAdapter implements AiProviderPort {
     private final List<ToolCallback> toolCallbacks;
 
     public OllamaAiAdapter(ChatModel chatModel, ToolCallingManager toolCallingManager, List<AgentTool> tools,
-                           ObjectProvider<McpToolRegistry> mcpToolRegistry, ChatMemory chatMemory) {
+                           ObjectProvider<McpToolRegistry> mcpToolRegistry, ChatMemory chatMemory,
+                           ToolPolicy toolPolicy) {
         this.chatModel = chatModel;
         this.toolCallingManager = toolCallingManager;
         this.chatMemory = chatMemory;
@@ -51,7 +53,21 @@ public class OllamaAiAdapter implements AiProviderPort {
         if (registry != null) {
             callbacks.addAll(registry.toolCallbacks());
         }
-        this.toolCallbacks = List.copyOf(callbacks);
+        this.toolCallbacks = filterByPolicy(callbacks, toolPolicy);
+    }
+
+    private List<ToolCallback> filterByPolicy(List<ToolCallback> callbacks, ToolPolicy toolPolicy) {
+        List<ToolCallback> enabled = callbacks.stream()
+                .filter(callback -> toolPolicy.isToolEnabled(callback.getToolDefinition().name()))
+                .toList();
+        if (enabled.size() != callbacks.size()) {
+            List<String> disabled = callbacks.stream()
+                    .map(callback -> callback.getToolDefinition().name())
+                    .filter(name -> !toolPolicy.isToolEnabled(name))
+                    .toList();
+            log.info("Tool-Policy deaktiviert {} Werkzeug(e): {}", disabled.size(), String.join(", ", disabled));
+        }
+        return List.copyOf(enabled);
     }
 
     @Override
