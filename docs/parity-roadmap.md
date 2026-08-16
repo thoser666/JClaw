@@ -1,6 +1,6 @@
 # JClaw → OpenClaw-Parität: Roadmap
 
-Stand: 2026-08-15 · Basis: `docs/openclaw-compat.md` (Formatanalyse) · Ziel: **100 % Parität** zu OpenClaw.
+Stand: 2026-08-15 · Basis: `docs/openclaw-compat.md` (Formatanalyse) · Referenz-Version: OpenClaw **2026.7.1** (Stable) / **2026.8.1-beta.2** (Betainhalt) · Ziel: **100 % Parität** zu OpenClaw.
 
 ## Status-Legende
 
@@ -50,9 +50,9 @@ Agent-Kern-Fähigkeiten, die OpenClaw zusätzlich bietet und die ohne JS möglic
 | P1-06 | Kern-Tool: Patch | `apply_patch` für strukturierte Datei-Änderungen | 🟡 | ✅ |
 | P1-07 | Kern-Tool: Agent | `spawn_agent` / Multi-Agent-Subprozesse | 🟢 | ⬜ |
 | P1-08 | Tool-Policies | Allow-/Denylisten je Agent (`tools.allow`), `toolMetadata.autoApproved` | 🟡 | ⬜ |
-| P1-09 | Session-Konzept | Von `contextId` auf Sessions erweitern (Reset-Strategien `daily`/`idle`, Thread-Bindings, `dmScope`) | 🟡 | ⬜ |
+| P1-09 | Session-Konzept | Von `contextId` auf Sessions erweitern (Reset-Strategien `daily`/`idle`, Thread-Bindings, `dmScope`); Session-Gruppen, generierte Titel, Transcript-Export, Kontext-Verbrauch (Session-first-UI seit 2026.7.1) | 🟡 | ⬜ |
 | P1-10 | Compaction | Kontext-Kompression bei Session-Grenzen | 🟢 | ⬜ |
-| P1-11 | Hooks | `HOOK.md`-Scripts + Lifecycle-Events (before_tool_call, before_agent_run, …) via Script-Runner | 🟡 | ⬜ |
+| P1-11 | Hooks | `HOOK.md`-Scripts + Lifecycle-Events (before_tool_call, before_agent_run, …) via Script-Runner; Hook-Stage-Migration beachten (`before_agent_start`/SDK-Root-Imports seit 2026.6.34 entfernt) | 🟡 | ⬜ |
 | P1-12 | Cron-Jobs | Wiederkehrende Agent-Jobs (`cron.*`-Konfiguration) | 🟢 | ⬜ |
 
 ---
@@ -81,7 +81,7 @@ OpenClaw-Kernfeature: Nachrichten von/nach externen Plattformen.
 | P3-03 | Slack | Channel-Adapter (Socket Mode) | 🟡 | ⬜ |
 | P3-04 | Discord | Channel-Adapter (WebSocket) | 🟡 | ⬜ |
 | P3-05 | WhatsApp | Channel-Adapter | 🟡 | ⬜ |
-| P3-06 | X / Signal / E-Mail | Weitere OpenClaw-Channel | 🟢 | ⬜ |
+| P3-06 | Weitere Channels | Buzz (Nostr), ClickClack, IRC, Google Chat, Synology Chat, Mattermost, Feishu u. a. | 🟢 | ⬜ |
 
 ---
 
@@ -92,8 +92,9 @@ OpenClaw-Kernfeature: Nachrichten von/nach externen Plattformen.
 | P4-01 | Plugin-Laufzeit | Node-Sidecar führt `definePluginEntry`/`defineChannelPluginEntry` aus (setzt P1-03 voraus) | 🔴 | 🚫 |
 | P4-02 | Wissen-Memory | Semantisches Memory über Embeddings (z. B. pgvector/Chroma), `kind: "memory"`, Injektion relevanter Chunks | 🟡 | ⬜ |
 | P4-03 | Media-Provider | Speech/Media-Provider (TTS/STT) | 🟢 | ⬜ |
-| P4-04 | Provider-Abstraktion | Modell-Provider über Ollama hinaus (OpenAI-kompatibel, Anthropic, …) via Spring AI | 🟡 | ⬜ |
+| P4-04 | Provider-Abstraktion | Modell-Provider über Ollama hinaus (OpenAI-kompatibel, Anthropic, …) via Spring AI; Referenz-Stand 2026.7.1: GPT-5.6 (+ Sol/Terra/Luna), Claude Sonnet 5, Meta Muse Spark 1.1, Featherless, ClawRouter, lokales Setup (Ollama/llama.cpp/LM Studio) | 🟡 | ⬜ |
 | P4-05 | Paritäts-Testsuite | Automatisierte Konformitäts-Checks: Manifeste, Konfig, Hooks, Tool-Schemas gegen OpenClaw-Referenz | 🟡 | ⬜ |
+| P4-06 | Skill Workshop | Vorschlags-Verwaltung (`skills.workshop.*`): Proposals, apply/reject/quarantine, `approvalPolicy: "pending"` (seit 2026.6.1) | 🟢 | ⬜ |
 
 ---
 
@@ -107,7 +108,7 @@ Die Bausteine werden nicht einzeln, sondern in Versionen mit einem in sich gesch
 | **0.2.0** | Konfiguration & Gateway | P2-01 JSON5-Konfig, P2-02 Schema-Validierung, P2-03 Hot-Reload, P2-04 Gateway-Steuerung, P2-06 Auth | Steuerungsebene als Anker für Hooks, Cron und Channels |
 | **0.3.0** | Multi-Agent & Plugins | P1-07 `spawn_agent`, P4-01 Plugin-Laufzeit, P4-04 Provider-Abstraktion, P1-12 Cron | OpenClaw-Parität beim Agent-Verhalten |
 | **0.4.0** | Channels | P3-01 Channel-API, P3-02 Telegram, P3-03 Slack, P3-04 Discord, ~~P2-05~~ ✅ Control-UI | Nutzbares Multi-Plattform-Produkt |
-| **1.0.0** | 100 % Parität | P1-11 Hooks, P1-10 Compaction, P4-02 Memory, P4-03 Media, P4-05 Paritäts-Testsuite, restliche Channels | Feature-Parität, erste stabile Version |
+| **1.0.0** | 100 % Parität | P1-11 Hooks, P1-10 Compaction, P4-02 Memory, P4-03 Media, P4-05 Paritäts-Testsuite, P4-06 Skill Workshop, restliche Channels | Feature-Parität, erste stabile Version |
 
 Anmerkungen:
 
@@ -120,7 +121,9 @@ Anmerkungen:
 
 > **Web-Tools (P1-05) getroffen:** `web_fetch` mit `allowedDomains`-Policy (Subdomains erlaubt, nur http/https, Größenlimit) und `web_search` über einen konfigurierbaren Such-Endpoint (Standard: DuckDuckGo Instant Answer, `jclaw.agent.webtool.search-endpoint`). Beide sind Deny-by-Default (`jclaw.agent.webtool.enabled`).
 
-> **Control-UI (P2-05) getroffen:** Bewusst **keine Framework-SPA** (kein Build-Schritt, keine externen CDN-Abhängigkeiten). Eine statische SPA in `src/main/resources/static/` (Vanilla-JS + `fetch`) bindet die vorhandene REST-API an (`POST /api/v1/tasks`, `GET /api/v1/skills`, `GET|DELETE /api/v1/conversations/{contextId}`, `GET /api/v1/plugins`). Die Gateway-/Session-Steuerung aus der ursprünglichen P2-05-Beschreibung bleibt Teil von P2-04.
+> **Control-UI (P2-05) getroffen:** Bewusst **keine Framework-SPA** (kein Build-Schritt, keine externen CDN-Abhängigkeiten). Eine statische SPA in `src/main/resources/static/` (Vanilla-JS + `fetch`) bindet die vorhandene REST-API an (`POST /api/v1/tasks`, `GET /api/v1/skills`, `GET|DELETE /api/v1/conversations/{contextId}`, `GET /api/v1/plugins`). Die Gateway-/Session-Steuerung aus der ursprünglichen P2-05-Beschreibung bleibt Teil von P2-04. OpenClaws Control-UI ist seit **2026.7.1 session-first** (durchsuchbare Sessions, Gruppen, generierte Titel, Transcript-Export, Kontext-Verbrauch) — die Übernahme dieser Session-UI-Features ist Scope von P1-09/P2-04 und kein Blocker für P2-05.
+
+> **Plugin-SDK-Stand (2026.6.34):** `before_agent_start`, Root-`openclaw/plugin-sdk`-Imports, `providerAuthEnvVars`/`channelEnvVars` werden nach dem 24.07.2026 entfernt. Die Node-Sidecar-Laufzeit (P4-01) muss gegen den **aktuellen** SDK-Stand bauen (Subpath-Imports, moderne Hook-Stages, `setup`-Deskriptoren); Details in `openclaw-compat.md` §3. Der Versionsstand der Referenz (2026.7.1 Stable / 2026.8.1-beta.2) ist in `openclaw-compat.md` §1.1 dokumentiert.
 
 > Die Plugin-Laufzeit-Entscheidung (Node-Sidecar vs. GraalJS vs. Java-Reimplementation) ist getroffen: **Node-Sidecar**, siehe [ADR-0001](adr/0001-node-sidecar-plugin-runtime.md). Das Bridge-Protokoll ist vollständig spezifiziert (siehe [bridge-protocol.md](bridge-protocol.md), P1-03).
 

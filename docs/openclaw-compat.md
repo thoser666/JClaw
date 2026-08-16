@@ -1,6 +1,6 @@
 # OpenClaw-Kompatibilität — Analyse der Formate und Architektur
 
-Stand: 2026-08-08 · Quellen: `github.com/openclaw/openclaw` (`/docs`), `docs.openclaw.ai` (Plugins, Manifest, Hooks, Gateway/Configuration), AgentSkills-Spec (`agentskills.io`), Agent-Plugins-Standard (`agent-plugins.org`).
+Stand: 2026-08-15 · Referenz: OpenClaw **2026.7.1** (Stable) / **2026.6.34** (Extended-Stable) / **2026.8.1-beta.2** · Quellen: `github.com/openclaw/openclaw` (`/docs`, Releases/CHANGELOG), `docs.openclaw.ai` (Plugins, Manifest, Hooks, Gateway/Configuration), AgentSkills-Spec (`agentskills.io`), Agent-Plugins-Standard (`agent-plugins.org`).
 
 ## Ziel
 
@@ -23,6 +23,26 @@ OpenClaw ist ein **Node.js/TypeScript-Framework** (ESM, pnpm-Workspace, npm-Pake
 | **Memory/Sessions** | Session-basiert (DM-/Thread-Bindung, Reset-Strategien), konversationell + Wissens-/Embedding-Memory, SQLite. |
 
 Implikation: Der **Agent-Kern selbst ist in Java nachbildbar**; die **Plugins sind nur über JavaScript/Node ausführbar** (sie importieren die `openclaw`-Runtime und registrieren sich zur Laufzeit).
+
+### 1.1 Versionsstand und neue Features
+
+OpenClaw folgt Kalender-Versionierung (`YYYY.M.PATCH`) mit den Kanälen Stable, Beta und Dev (Extended-Stable = Wartungslinie):
+
+| Channel | Version | Datum | Bedeutung |
+|---|---|---|---|
+| **Stable** | **2026.7.1** (Korrekturreleases `-1`/`-2`) | 13.07.2026 / Korrekturen 04.08.2026 | Aktuelle stabile Linie |
+| Extended-Stable | **2026.6.34** | 08.08.2026 | Wartungslinie (`extended-stable` npm/Container) |
+| Beta | **2026.8.1-beta.2** | 15.08.2026 | Neue Features, aber **Full Release Validation fehlgeschlagen → nicht promotion-ready** |
+
+Für die JClaw-Parität relevante Änderungen seit der Erstanlage (2026-08-08):
+
+- **Session-first Control-UI (2026.7.1):** Sessions sind die primäre Navigations-Einheit — durchsuchbare Session-Liste, **Session-Gruppen**, **generierte Titel**, **Transcript-Export**, Anzeige von Kontext-Verbrauch sowie Modell-/Thinking-Steuerung je Session. → betrifft P1-09 (Session-Konzept) und die Session-Steuerung der JClaw-UI (P2-04).
+- **Neue Channels:** Zusätzlich zu Telegram/Slack/Discord/WhatsApp/X/Signal/Email gibt es u. a. **Buzz (Nostr)**, **ClickClack**, **IRC**, **Google Chat**, **Synology Chat**, **Mattermost**, **Feishu** (Stand 2026.8.x). Im Plugin-SDK gibt es dafür einen gemeinsamen **Ingress-Monitor** (durable admission, polling, pruning, claim-identity validation, adoption handoff, shutdown) — Channel-Adapter sollen diesen Lifecycle nachbilden statt eigener Logik. → betrifft P3.
+- **Plugin-SDK-Migration (angekündigt in 2026.6.34):** Hook-Stage `before_agent_start`, Root-Imports `openclaw/plugin-sdk`, `providerAuthEnvVars` und `channelEnvVars` werden **nach dem 24.07.2026 entfernt**. Migrationsziel: moderne Hook-Stages, fokussierte SDK-Subpath-Imports, Manifest-`setup`-Deskriptoren. → betrifft §3 und P4-01.
+- **Skill Workshop (2026.6.1, ausgebaut in 2026.8.x):** `skills.workshop.*` verwaltet Skill-Vorschläge (apply/reject/quarantine); `skills.workshop.approvalPolicy: "pending"` schaltet ein Approval-Gate ein. → reine Control-Plane, in Java nachbildbar; betrifft §2 und P0-01.
+- **Neue Provider/Modelle (2026.7.1/8.1):** GPT-5.6 (inkl. Ultra/Sol/Terra/Luna mit atomarem Laufzeitwechsel), Claude Sonnet 5, Meta Muse Spark 1.1, Featherless, ClawRouter (dynamische Model-Discovery, Budget-Reporting); lokales Setup für Ollama/llama.cpp/LM Studio. → betrifft P4-04 (Provider-Abstraktion).
+- **Speicher & Backup:** Schema-Migration zu SQLite (2026.6.1); `openclaw backup sqlite create|list|verify|restore` mit globalen und Per-Agent-Snapshots (2026.8.1-beta.2). → JClaw nutzt H2; die Backup-/Recovery-Semantik dient als Referenz.
+- **Security/Stability (2026.6.34/8.1):** Secret-Egress-Host-Binding (fail-closed), Plugin-Install-Provenance (`--force` für beliebige ausführbare Quellen), Browser-/Netzwerk-Boundary-Hardening, Caps für feindliche Response-Größen. → Security-Policies als Mindestniveau übernehmen.
 
 ---
 
@@ -54,6 +74,8 @@ Implikation: Der **Agent-Kern selbst ist in Java nachbildbar**; die **Plugins si
 
 ### Konfiguration
 `skills.entries.*` (direkte Pfad-/Ordner-Registrierung), `agents.defaults.skills` (Skill-Auswahl je Agent), Agent-Allowlisten/Denylisten.
+
+Seit 2026.6.x ergänzt der **Skill Workshop** (`skills.workshop.*`) eine Vorschlags-Verwaltung: Der Agent erzeugt Skill-Proposals, die per Control-UI/CLI **angewendet, abgelehnt oder quarantäniert** werden können; `skills.workshop.approvalPolicy: "pending"` schaltet ein explizites Approval-Gate ein. Seit 2026.8.x läuft auch eine manuelle, neue-zu-alt Rückschau über ältere Sessions (nur SQLite-Cursor-Metadaten). Bewertung für JClaw: reine **Control-Plane**, in Java nachbildbar (Proposal-Datenmodell + Workflow).
 
 ### Bewertung für JClaw
 **Vollständig in Java machbar (kein JS nötig):** Reiner Text-Injektionsmechanismus.
@@ -113,6 +135,8 @@ Hooks werden sequenziell in absteigender `priority` ausgeführt (jeder kann den 
 | Installs | `before_install` |
 | Skills | `skill_proposal_evaluate`, `skill_changed` |
 
+> **SDK-Migration (angekündigt in 2026.6.34):** Hook-Stage `before_agent_start`, Root-Imports aus `openclaw/plugin-sdk`, `providerAuthEnvVars` und `channelEnvVars` werden **nach dem 24.07.2026 entfernt**. Migrationsziel: moderne Hook-Stages (siehe Tabelle), fokussierte SDK-Subpath-Imports, Manifest-`setup`-Deskriptoren. Eine 1:1-Parität der Plugin-Laufzeit (P4-01) muss gegen den **neuen** SDK-Stand bauen.
+
 ### Kompatible fremde Bundles (Auto-Detect, kein eigenes Schema)
 - **Agent Plugins**: `plugin.json` (agent-plugins.org).
 - **Codex**: `.codex-plugin/plugin.json`.
@@ -121,6 +145,8 @@ Hooks werden sequenziell in absteigender `priority` ausgeführt (jeder kann den 
 
 ### Installation
 `openclaw plugins install <ClawHub- oder npm-Spec>` (`clawhub:<name>`, npm-Paket, `npm-pack:<tarball>`), `plugins.load.paths` für lokale Pfade.
+
+Seit 2026.8.x verlangen **beliebige ausführbare Plugin-Quellen** eine explizite Bestätigung (`--force`); ClawHub-, npm-, Official-Catalog- und tracked-update-Flüsse bleiben unbehindert, Crestodian-Installationen sind auf vertrauenswürdige Quellen beschränkt.
 
 ### Bewertung für JClaw
 **1:1 nur über JavaScript/Node möglich** — Plugins sind TypeScript + npm und importieren die `openclaw`-Runtime.
@@ -182,6 +208,7 @@ Datei-/Shell-Zugriff (`exec`, `read`/`write`/`glob`/`grep`, `apply_patch`), Web 
 ## 6. Memory / Sessions
 
 - **Session** = Konversations-Kontext (DM-/Thread-Bindung, `session.reset: daily|idle`, `dmScope`), Persistenz in SQLite.
+- **Session-first (2026.7.1):** Sessions sind die primäre Navigationseinheit der Control-UI — durchsuchbare Liste, **Session-Gruppen**, **generierte Titel**, **Transcript-Export**, Kontext-Verbrauch und Modell-/Thinking-Steuerung je Session.
 - **Konversationell**: jüngste Nachrichten + vorherige Loop-Steps.
 - **Wissen/Embeddings**: langfristiges semantisches Memory (Memory-Plugin, `kind: "memory"`), chunks werden bei Injektion ausgewertet.
 - **Compaction**: Kontext wird komprimiert, wenn Session-Grenzen erreicht werden.
@@ -198,6 +225,7 @@ Datei-/Shell-Zugriff (`exec`, `read`/`write`/`glob`/`grep`, `apply_patch`), Web 
 |---|---|---|---|
 | Skills laden/parsen | `SKILL.md` + YAML/JSON5-Frontmatter | **Ja** (SnakeYAML + Fallback) | Gering |
 | Skill-Injektion in Prompt | Text-Kontext + Allowlisten | **Ja** | Gering |
+| Skill Workshop | `skills.workshop.*` (Proposals, Approval) | **Ja** (Control-Plane) | Gering |
 | Konfig `openclaw.json` | JSON5 + strikte Schema-Validierung | **Ja** (JSON5-Parser + Validator) | Mittel |
 | Session-/Memory-Konzept | SQLite, Reset, Thread-Bindings, Compaction | **Ja** (auf H2 aufbauend) | Mittel |
 | Kern-Tools | Kern-Tools + Policies | **Ja** (Spring AI `ToolCallback`, Security-Policies) | Mittel |
@@ -238,7 +266,7 @@ Datei-/Shell-Zugriff (`exec`, `read`/`write`/`glob`/`grep`, `apply_patch`), Web 
 
 ## 9. Nächste Schritte
 
-> Der Fortschritt wird in der [Paritäts-Roadmap](parity-roadmap.md) verfolgt. Stand: P0 (Fundament), P1-01 (Plugin Control-Plane), P1-02 (Architektur-Entscheidung Node-Sidecar) und **P1-03 (Bridge-Protokoll)** sind abgeschlossen.
+> Der Fortschritt wird in der [Paritäts-Roadmap](parity-roadmap.md) verfolgt. Stand: P0 (Fundament), P1-01 (Plugin Control-Plane), P1-02 (Architektur-Entscheidung Node-Sidecar), **P1-03 (Bridge-Protokoll)**, **P1-04 (MCP-Client)**, **P1-05 (Web-Tools)** und **P1-06 (`apply_patch`)** sind abgeschlossen.
 
-1. **MCP-Client anbinden** (P1-04), **Session-Konzept auf H2 umbauen**, **Kern-Tools erweitern** (Web-Tools, `apply_patch`).
+1. **Session-Konzept auf H2 umbauen** (P1-09) und **Tool-Policies** (P1-08) umsetzen.
 2. Danach: Channels, Konfig-Gateway (JSON5), Hooks, Cron gemäß Roadmap.
