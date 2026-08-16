@@ -370,3 +370,7 @@ Die UI rendert alle Daten ausschließlich über `textContent` (kein `innerHTML`-
 ```bash
 mvnw test
 ```
+
+## Lizenz
+
+JClaw ist unter der **Apache License, Version 2.0** lizenziert — siehe [LICENSE](LICENSE). Die Lizenz erlaubt Nutzung, Modifikation und Verteilung (auch kommerziell), inklusive explizitem Patent-Grant. Der Maven-Wrapper (`mvnw`/`mvnw.cmd`) unterliegt der Apache-2.0-Lizenz der ASF.
