@@ -36,7 +36,7 @@ class TaskRestControllerTest {
     @Test
     void postWithValidRequestReturnsAgentResponse() throws Exception {
         AgentResponse response = new AgentResponse("Antwort", Instant.parse("2026-08-06T08:00:00Z"),
-                List.of(new ToolInvocation("calculate", "{\"expression\":\"2+2\"}", "4")), 2);
+                List.of(new ToolInvocation("calculate", "{\"expression\":\"2+2\"}", "4")), 2, null);
         when(executeTaskUseCase.handle(argThat(command -> command.prompt().equals("Hallo")
                 && command.contextId().equals("c1")))).thenReturn(response);
 

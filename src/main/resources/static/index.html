@@ -21,6 +21,9 @@
             <button class="nav-item is-active" type="button" data-panel="agent" aria-current="page">
                 <span class="nav-icon" aria-hidden="true">&#9679;</span> Agent
             </button>
+            <button class="nav-item" type="button" data-panel="sessions">
+                <span class="nav-icon" aria-hidden="true">&#9776;</span> Sessions
+            </button>
             <button class="nav-item" type="button" data-panel="conversations">
                 <span class="nav-icon" aria-hidden="true">&#9776;</span> Konversationen
             </button>
@@ -60,6 +63,15 @@
             <div id="task-status" class="status" role="status" aria-live="polite"></div>
 
             <div id="task-result" class="card result hidden"></div>
+        </section>
+
+        <section class="panel" id="panel-sessions" aria-labelledby="heading-sessions" hidden>
+            <header class="panel-header">
+                <h1 id="heading-sessions">Sessions</h1>
+                <p class="panel-sub">Verfügbare Sessions mit Titel und Zeitstempel. Klick auf eine Session lädt sie in den Agent.</p>
+            </header>
+            <div id="sessions-status" class="status" role="status" aria-live="polite"></div>
+            <div id="sessions-list" class="grid"></div>
         </section>
 
         <section class="panel" id="panel-conversations" aria-labelledby="heading-conversations" hidden>

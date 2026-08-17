@@ -267,7 +267,6 @@ Datei-/Shell-Zugriff (`exec`, `read`/`write`/`glob`/`grep`, `apply_patch`), Web 
 
 ## 9. Nächste Schritte
 
-> Der Fortschritt wird in der [Paritäts-Roadmap](parity-roadmap.md) verfolgt. Stand: P0 (Fundament), P1-01 (Plugin Control-Plane), P1-02 (Architektur-Entscheidung Node-Sidecar), **P1-03 (Bridge-Protokoll)**, **P1-04 (MCP-Client)**, **P1-05 (Web-Tools)** und **P1-06 (`apply_patch`)** sind abgeschlossen.
+> Der Fortschritt wird in der [Paritäts-Roadmap](parity-roadmap.md) verfolgt. Stand: P0 (Fundament), P1-01 (Plugin Control-Plane), P1-02 (Architektur-Entscheidung Node-Sidecar), **P1-03 (Bridge-Protokoll)**, **P1-04 (MCP-Client)**, **P1-05 (Web-Tools)**, **P1-06 (`apply_patch`)**, **P1-08 (Tool-Policies)** und **P1-09 (Session-Konzept)** sind abgeschlossen.
 
-1. **Session-Konzept auf H2 umbauen** (P1-09) und **Tool-Policies** (P1-08) umsetzen.
-2. Danach: Channels, Konfig-Gateway (JSON5), Hooks, Cron gemäß Roadmap.
+1. Danach: Hooks (P1-11), Multi-Agent (P1-07), Konfig-Gateway (JSON5, Hot-Reload), Channels gemäß Roadmap.

@@ -4,16 +4,22 @@ import biz.brumm.config.ClawAgentProperties;
 import biz.brumm.config.SkillProperties;
 import biz.brumm.domain.model.AgentCommand;
 import biz.brumm.domain.model.AgentResponse;
+import biz.brumm.domain.model.Session;
 import biz.brumm.domain.model.Skill;
 import biz.brumm.domain.port.in.ExecuteTaskUseCase;
 import biz.brumm.domain.port.out.AiProviderPort;
 import biz.brumm.domain.port.out.SkillProvider;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.UUID;
 
 @Service
 public class ClawAgentService implements ExecuteTaskUseCase {
+
+    private static final Logger log = LoggerFactory.getLogger(ClawAgentService.class);
 
     private static final String BASE_SYSTEM_PROMPT = """
             Du bist JClaw, ein autonomer und hochgradig strukturierter Software-Agent.
@@ -26,18 +32,46 @@ public class ClawAgentService implements ExecuteTaskUseCase {
     private final ClawAgentProperties properties;
     private final SkillProperties skillProperties;
     private final SkillProvider skillProvider;
+    private final SessionService sessionService;
 
     public ClawAgentService(AiProviderPort aiProviderPort, ClawAgentProperties properties,
-                            SkillProperties skillProperties, SkillProvider skillProvider) {
+                            SkillProperties skillProperties, SkillProvider skillProvider,
+                            SessionService sessionService) {
         this.aiProviderPort = aiProviderPort;
         this.properties = properties;
         this.skillProperties = skillProperties;
         this.skillProvider = skillProvider;
+        this.sessionService = sessionService;
     }
 
     @Override
     public AgentResponse handle(AgentCommand command) {
-        return aiProviderPort.execute(command, buildSystemPrompt(), properties.maxIterations());
+        String effectiveContextId = command.contextId();
+        String sessionId = null;
+
+        if (effectiveContextId != null && !effectiveContextId.isBlank()) {
+            Session session = sessionService.findSession(effectiveContextId).orElse(null);
+            if (session != null && sessionService.shouldReset(session)) {
+                effectiveContextId = UUID.randomUUID().toString();
+                log.info("Session-Reset: neue Session-ID '{}'.", effectiveContextId);
+                session = null;
+            }
+            if (session == null) {
+                session = sessionService.createSession(effectiveContextId);
+            }
+            sessionId = session.sessionId();
+        }
+
+        AgentCommand resolvedCommand = new AgentCommand(command.prompt(), effectiveContextId);
+        AgentResponse rawResponse = aiProviderPort.execute(resolvedCommand, buildSystemPrompt(),
+                properties.maxIterations());
+
+        if (sessionId != null) {
+            sessionService.touchSession(sessionId, command.prompt());
+            return new AgentResponse(rawResponse.content(), rawResponse.timestamp(),
+                    rawResponse.toolInvocations(), rawResponse.iterations(), sessionId);
+        }
+        return rawResponse;
     }
 
     private String buildSystemPrompt() {

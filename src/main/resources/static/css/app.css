@@ -281,6 +281,17 @@ body {
     background: #fee2e2;
 }
 
+.btn-sm {
+    padding: 5px 10px;
+    font-size: 12.5px;
+}
+
+.tile-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 12px;
+}
+
 .status {
     min-height: 22px;
     margin: 4px 2px 14px;

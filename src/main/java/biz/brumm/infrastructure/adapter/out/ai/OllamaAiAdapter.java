@@ -101,7 +101,7 @@ public class OllamaAiAdapter implements AiProviderPort {
                 if (hasContext) {
                     storeConversation(prompt, assistantMessage, command.contextId());
                 }
-                return new AgentResponse(assistantMessage.getText(), Instant.now(), toolInvocations, iterations + 1);
+                return new AgentResponse(assistantMessage.getText(), Instant.now(), toolInvocations, iterations + 1, null);
             }
 
             ToolExecutionResult toolExecutionResult = toolCallingManager.executeToolCalls(prompt, response);

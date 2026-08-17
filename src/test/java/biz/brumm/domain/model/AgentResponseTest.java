@@ -16,7 +16,7 @@ class AgentResponseTest {
         List<ToolInvocation> invocations = new ArrayList<>();
         invocations.add(new ToolInvocation("calculate", "{}", "4"));
 
-        AgentResponse response = new AgentResponse("Antwort", Instant.now(), invocations, 1);
+        AgentResponse response = new AgentResponse("Antwort", Instant.now(), invocations, 1, null);
         invocations.add(new ToolInvocation("other", "{}", "x"));
 
         assertThat(response.toolInvocations()).hasSize(1);

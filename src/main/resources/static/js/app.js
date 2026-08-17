@@ -88,6 +88,7 @@
         });
         if (name === "skills" && !skillsLoaded) loadSkills();
         if (name === "plugins" && !pluginsLoaded) loadPlugins();
+        if (name === "sessions" && !sessionsLoaded) loadSessions();
     }
 
     $$(".nav-item").forEach((item) => {
@@ -311,6 +312,72 @@
                 tile.appendChild(el("p", { class: "tile-desc", text: plugin.validationMessage }));
             }
             pluginsList.appendChild(tile);
+        });
+    }
+
+    /* ---------- Sessions ---------- */
+
+    let sessionsLoaded = false;
+    const sessionsStatus = $("#sessions-status");
+    const sessionsList = $("#sessions-list");
+
+    async function loadSessions() {
+        setStatus(sessionsStatus, "Lädt Sessions …", "info");
+        try {
+            const sessions = await api("/api/v1/sessions");
+            renderSessions(sessions);
+            setStatus(sessionsStatus, "");
+        } catch (error) {
+            empty(sessionsList);
+            setStatus(sessionsStatus, error.message, "error");
+        } finally {
+            sessionsLoaded = true;
+        }
+    }
+
+    function renderSessions(sessions) {
+        empty(sessionsList);
+        if (sessions.length === 0) {
+            sessionsList.appendChild(el("p", { class: "empty", text: "Keine Sessions vorhanden." }));
+            return;
+        }
+        sessions.forEach((session) => {
+            const tile = el("div", { class: "tile" });
+            const head = el("div", { class: "tile-head" });
+            const title = session.displayName || session.sessionId;
+            head.appendChild(el("h2", { class: "tile-title", text: title }));
+            if (!session.displayName) {
+                head.appendChild(badge(session.sessionId, "badge-type"));
+            }
+            tile.appendChild(head);
+
+            const meta = el("div", { class: "tile-meta" });
+            if (session.displayName) {
+                meta.appendChild(el("span", { text: session.sessionId }));
+            }
+            meta.appendChild(el("span", { text: formatTime(session.lastInteractionAt) }));
+            tile.appendChild(meta);
+
+            const actions = el("div", { class: "tile-actions" });
+            const selectBtn = el("button", { class: "btn btn-primary btn-sm", text: "Auswählen" });
+            selectBtn.addEventListener("click", () => {
+                $("#task-context").value = session.sessionId;
+                showPanel("agent");
+            });
+            const deleteBtn = el("button", { class: "btn btn-danger btn-sm", text: "Löschen" });
+            deleteBtn.addEventListener("click", async () => {
+                try {
+                    await api("/api/v1/sessions/" + encodeURIComponent(session.sessionId), { method: "DELETE" });
+                    loadSessions();
+                } catch (err) {
+                    setStatus(sessionsStatus, err.message, "error");
+                }
+            });
+            actions.appendChild(selectBtn);
+            actions.appendChild(deleteBtn);
+            tile.appendChild(actions);
+
+            sessionsList.appendChild(tile);
         });
     }
 })();

@@ -39,6 +39,7 @@ Das Projekt folgt der hexagonalen Struktur unter dem Package-Stamm `biz.brumm`:
 * **Control-UI (P2-05):** Statische Web-Oberfläche (kein Build-Schritt, keine externen Abhängigkeiten) unter `http://localhost:8080` — Agent-Aufgaben ausführen, Konversationen laden/löschen, Skills und Plugins anzeigen (siehe [Control-UI](#control-ui)).
 * **Fehlerbehandlung:** Ein globaler `@RestControllerAdvice` liefert bei ungültigen Anfragen (z. B. leerem Prompt) eine 400-Antwort mit Fehlermeldung.
 * **Tool-Policies (P1-08):** Per `jclaw.agent.tools.allow`/`.deny` lassen sich einzelne Werkzeuge für den Agenten freischalten bzw. sperren (Allow-/Denyliste, Deny-by-Default; Deny schlägt Allow). Deaktivierte Werkzeuge werden dem LLM nicht als Tool-Schema angeboten — analog zu OpenClaws `tools.allow`-Policy.
+* **Session-Konzept (P1-09):** Das ursprüngliche `contextId`-Memory wurde durch ein Session-Modell erweitert. Jeder Aufruf einer `contextId` löst automatisch eine Session auf (oder erstellt eine neue). Sessions haben einen generierten Titel (aus der ersten Nachricht, max. 60 Zeichen), Zeitstempel und unterstützen Reset-Strategien (`daily`, `idle`, `none`) über `jclaw.session.*`. Session-Metadaten werden persistent in einer H2-`session`-Tabelle gespeichert. Die Control-UI zeigt Sessions als eigene Navigation an mit Auswahl- und Löschfunktion.
 
 ## Voraussetzungen
 
@@ -100,6 +101,9 @@ Einstellungen in `src/main/resources/application.properties`:
 | `jclaw.agent.webtool.max-search-results` | `5` | Maximale Anzahl von Treffern pro Suche |
 | `jclaw.agent.tools.allow` | `-` (leer) | Allowliste der Tool-Namen (`readFile`, `runCommand`, `web_fetch`, MCP-Tools wie `math-server_add`, …). Leer = alle Tools erlaubt; gesetzt = nur die genannten Tools aktiv (Deny-by-Default) |
 | `jclaw.agent.tools.deny` | `-` (leer) | Denyliste der Tool-Namen. Leer = kein Tool gesperrt; **Deny schlägt Allow** |
+| `jclaw.session.reset-mode` | `none` | Session-Reset-Strategie: `none`, `daily` (reset pro Tag) oder `idle` (reset nach Inaktivität) |
+| `jclaw.session.reset-at-hour` | `4` | Stunde (0–23) für den `daily`-Reset (lokal) |
+| `jclaw.session.reset-idle-minutes` | `60` | Inaktivitätszeit in Minuten für den `idle`-Reset |
 
 ## Skills
 
@@ -227,7 +231,7 @@ jclaw.agent.webtool.max-search-results=5
 
 Das Konversations-Memory wird über Spring JDBC in einer eingebetteten **H2-Datenbank** gespeichert:
 
-* Das Tabellenschema ist in `src/main/resources/schema.sql` definiert (Tabelle `chat_message` mit Primärschlüssel `(conversation_id, message_order)`).
+* Das Tabellenschema ist in `src/main/resources/schema.sql` definiert (Tabellen `chat_message` und `session`).
 * Die Datenbankdatei wird beim ersten Start automatisch unter `./data/jclaw.mv.db` angelegt (Ordner `data/` ist in `.gitignore` ausgenommen).
 * `JdbcChatMemoryRepository` serialisiert alle Spring-AI-Message-Typen (System, User, Assistant inkl. Tool-Calls, Tool-Response) als JSON in die Spalte `message_json`.
 * Ein Neustart der Anwendung stellt den Gesprächsverlauf einer `contextId` automatisch wieder her.
@@ -271,7 +275,8 @@ Antwort (HTTP 200):
       "result": "4"
     }
   ],
-  "iterations": 2
+  "iterations": 2,
+  "sessionId": "s1"
 }
 ```
 
@@ -352,6 +357,36 @@ Antwort (HTTP 200):
 
 Löscht den gesamten gespeicherten Verlauf einer `contextId` (idempotent). Antwort (HTTP 204, ohne Body).
 
+### Alle Sessions auflisten
+
+`GET /api/v1/sessions`
+
+Antwort (HTTP 200):
+
+```json
+[
+  {
+    "sessionId": "s1",
+    "displayName": "Hallo Welt",
+    "sessionStartedAt": "2026-08-16T10:00:00Z",
+    "lastInteractionAt": "2026-08-16T10:30:00Z",
+    "updatedAt": "2026-08-16T10:30:00Z"
+  }
+]
+```
+
+### Einzelne Session abrufen
+
+`GET /api/v1/sessions/{sessionId}`
+
+Gibt eine einzelne Session zurück oder 404, wenn sie nicht existiert.
+
+### Session löschen
+
+`DELETE /api/v1/sessions/{sessionId}`
+
+Löscht Session-Metadaten und zugehörige Konversationsnachrichten (idempotent). Antwort (HTTP 204, ohne Body).
+
 ## Control-UI
 
 Unter `http://localhost:8080` liefert Spring Boot eine schlanke Web-Oberfläche (`src/main/resources/static/`) zur Steuerung des Agenten aus — bewusst ohne Build-Schritt und ohne externe CDN-Abhängigkeiten (Vanilla-JS + `fetch`):
@@ -359,6 +394,7 @@ Unter `http://localhost:8080` liefert Spring Boot eine schlanke Web-Oberfläche 
 | Bereich | Funktion |
 |---|---|
 | **Agent** | Aufgabe + optionale `contextId` eingeben, Ausführung anstoßen; Antwort mit Anzahl der Iterationen und aufklappbaren Tool-Aufrufen |
+| **Sessions** | Verfügbare Sessions mit Titel und Zeitstempel auflisten; Klick auf eine Session lädt sie in den Agent; Session löschen |
 | **Konversationen** | Verlauf einer `contextId` laden (als Chat) und löschen |
 | **Skills** | Alle geladenen Skills mit Aktivierungsstatus |
 | **Plugins** | Erkannte Manifeste mit Typ, Version und Validierungsstatus |

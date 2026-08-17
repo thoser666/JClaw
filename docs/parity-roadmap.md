@@ -50,7 +50,7 @@ Agent-Kern-Fähigkeiten, die OpenClaw zusätzlich bietet und die ohne JS möglic
 | P1-06 | Kern-Tool: Patch | `apply_patch` für strukturierte Datei-Änderungen | 🟡 | ✅ |
 | P1-07 | Kern-Tool: Agent | `spawn_agent` / Multi-Agent-Subprozesse | 🟢 | ⬜ |
 | P1-08 | Tool-Policies | Allow-/Denyliste je Agent via `jclaw.agent.tools.allow`/`.deny` (Deny-by-Default, Deny schlägt Allow; deaktivierte Tools erscheinen nicht im Tool-Schema). `toolMetadata.autoApproved` erst mit Approval-Flow (P2-06) relevant | 🟡 | ✅ |
-| P1-09 | Session-Konzept | Von `contextId` auf Sessions erweitern (Reset-Strategien `daily`/`idle`, Thread-Bindings, `dmScope`); Session-Gruppen, generierte Titel, Transcript-Export, Kontext-Verbrauch (Session-first-UI seit 2026.7.1) | 🟡 | ⬜ |
+| P1-09 | Session-Konzept | Von `contextId` auf Sessions erweitern (Reset-Strategien `daily`/`idle`, generierte Titel, REST-API); Session-first-UI seit 2026.7.1 als Referenz. Scope-Abgrenzung: Thread-Bindings, dmScope, Session-Gruppen, Transcript-Export und Kontext-Verbrauch sind P2-04 (Gateway) | 🟡 | ✅ |
 | P1-10 | Compaction | Kontext-Kompression bei Session-Grenzen | 🟢 | ⬜ |
 | P1-11 | Hooks | `HOOK.md`-Scripts + Lifecycle-Events (before_tool_call, before_agent_run, …) via Script-Runner; Hook-Stage-Migration beachten (`before_agent_start`/SDK-Root-Imports seit 2026.6.34 entfernt) | 🟡 | ⬜ |
 | P1-12 | Cron-Jobs | Wiederkehrende Agent-Jobs (`cron.*`-Konfiguration) | 🟢 | ⬜ |
@@ -104,7 +104,7 @@ Die Bausteine werden nicht einzeln, sondern in Versionen mit einem in sich gesch
 
 | Version | Thema | Bausteine | Ziel / Wert |
 |---|---|---|---|
-| **0.1.0** | Agent-Kern | ~~P1-06~~ ✅ `apply_patch`, ~~P1-08~~ ✅ Tool-Policies, P1-09 Session-Konzept | Verlässlicher Einzel-Agent mit Policy- und Session-Modell |
+| **0.1.0** | Agent-Kern | ~~P1-06~~ ✅ `apply_patch`, ~~P1-08~~ ✅ Tool-Policies, ~~P1-09~~ ✅ Session-Konzept | Verlässlicher Einzel-Agent mit Policy- und Session-Modell |
 | **0.2.0** | Konfiguration & Gateway | P2-01 JSON5-Konfig, P2-02 Schema-Validierung, P2-03 Hot-Reload, P2-04 Gateway-Steuerung, P2-06 Auth | Steuerungsebene als Anker für Hooks, Cron und Channels |
 | **0.3.0** | Multi-Agent & Plugins | P1-07 `spawn_agent`, P4-01 Plugin-Laufzeit, P4-04 Provider-Abstraktion, P1-12 Cron | OpenClaw-Parität beim Agent-Verhalten |
 | **0.4.0** | Channels | P3-01 Channel-API, P3-02 Telegram, P3-03 Slack, P3-04 Discord, ~~P2-05~~ ✅ Control-UI | Nutzbares Multi-Plattform-Produkt |
@@ -122,6 +122,8 @@ Anmerkungen:
 > **Web-Tools (P1-05) getroffen:** `web_fetch` mit `allowedDomains`-Policy (Subdomains erlaubt, nur http/https, Größenlimit) und `web_search` über einen konfigurierbaren Such-Endpoint (Standard: DuckDuckGo Instant Answer, `jclaw.agent.webtool.search-endpoint`). Beide sind Deny-by-Default (`jclaw.agent.webtool.enabled`).
 
 > **Tool-Policies (P1-08) getroffen:** OpenClaws `tools.allow`-Semantik ist als `jclaw.agent.tools.allow`/`.deny` umgesetzt. Ein `ToolPolicy`-Port (`domain.port.out`) mit `DefaultToolPolicy` (Properties-gestützt) entscheidet zentral, welche Tools aktiv sind; `OllamaAiAdapter` filtert die Spring-AI-`ToolCallback`s (inkl. MCP-Tools) beim Bauen, sodass deaktivierte Werkzeuge nie im Tool-Schema des Modells auftauchen. `toolMetadata.autoApproved` bleibt ausgesetzt, bis es einen Approval-Flow gibt (P2-06 Gateway-Auth / Human-in-the-Loop).
+
+> **Session-Konzept (P1-09) getroffen:** Session-first-UI (2026.7.1) als Referenz. Umgesetzt mit `Session`-Record (sessionId, displayName, sessionStartedAt, lastInteractionAt, updatedAt), `SessionStore`-Port und `H2SessionStore`-Implementierung (`session`-Tabelle in H2). `SessionService` verwaltet Session-Metadaten, Reset-Logik (`daily`/`idle`/`none` via `jclaw.session.*`) und leitet `displayName` aus der ersten Nachricht ab (max. 60 Zeichen). `ClawAgentService` löst Sessions beim Task-Call auf (per `contextId`), erstellt neue Sessions wenn keine existiert und prüft beim Touch ob ein Reset nötig ist. `AgentResponse` enthält jetzt `sessionId`. REST-API: `GET /api/v1/sessions`, `GET|DELETE /api/v1/sessions/{sessionId}`. Scope-Abgrenzung: Thread-Bindings, `dmScope`, Session-Gruppen, generierte Titel, Transcript-Export und Kontext-Verbrauch — diese Features sind Scope von P2-04 (Gateway-Steuerung) und P3 (Channels).
 
 > **Control-UI (P2-05) getroffen:** Bewusst **keine Framework-SPA** (kein Build-Schritt, keine externen CDN-Abhängigkeiten). Eine statische SPA in `src/main/resources/static/` (Vanilla-JS + `fetch`) bindet die vorhandene REST-API an (`POST /api/v1/tasks`, `GET /api/v1/skills`, `GET|DELETE /api/v1/conversations/{contextId}`, `GET /api/v1/plugins`). Die Gateway-/Session-Steuerung aus der ursprünglichen P2-05-Beschreibung bleibt Teil von P2-04. OpenClaws Control-UI ist seit **2026.7.1 session-first** (durchsuchbare Sessions, Gruppen, generierte Titel, Transcript-Export, Kontext-Verbrauch) — die Übernahme dieser Session-UI-Features ist Scope von P1-09/P2-04 und kein Blocker für P2-05.
 
@@ -141,4 +143,6 @@ Ein Baustein gilt als paritätisch, wenn:
 
 ## Nächste Schritte
 
-1. **P1-09** Session-Konzept auf der H2-Persistenz aufbauen (Reset-Strategien `daily`/`idle`, Thread-Bindings, Session-Gruppen, generierte Titel, Transcript-Export).
+1. **P2-01/P2-02** Konfigurations-Refactoring (JSON5 + Schema-Validierung, Hot-Reload) oder **P1-11** Hooks — je nach Priorisierung für 0.2.0.
+2. **P1-07** `spawn_agent` (Multi-Agent-Subprozesse) — letzter offener P1-Baustein vor Phase 2.
+3. **P2-04** Gateway-Steuerung — Session-Gruppen, Thread-Bindings, generierte Titel, Transcript-Export (erweitert P1-09 um volle Session-first-Parität).
