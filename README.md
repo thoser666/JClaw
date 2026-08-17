@@ -32,6 +32,7 @@ Das Projekt folgt der hexagonalen Struktur unter dem Package-Stamm `biz.brumm`:
   * `DateTimeTool` (`getCurrentDateTime`) – aktuelle Uhrzeit/Datum mit optionaler Zeitzone.
   * `FileTool` (`readFile`, `listDirectory`, `writeFile`, `glob`, `grep`) und `apply_patch` – Dateizugriff, -suche und -änderung innerhalb eines konfigurierten Arbeitsverzeichnisses (optional, s. u.).
   * `ShellTool` (`runCommand`) – führt Shell-Befehle im Arbeitsverzeichnis aus (optional, s. u.).
+  * `SpawnAgentTool` (`spawn_agent`) – startet einen Sub-Agenten mit eigenem Prompt und gleichen Werkzeugen (optional, s. u.).
 * **Skills (OpenClaw/AgentSkills-Format):** Skills aus dem konfigurierten Verzeichnis (`SKILL.md` mit YAML-Frontmatter) werden in den System-Prompt injiziert, sobald sie per `jclaw.agent.skills.enabled` aktiviert sind.
 * **Konversations-Memory:** Über eine optionale `contextId` wird der Gesprächsverlauf (Message-Window mit begrenzter Nachrichtenanzahl) pro Kontext gespeichert und bei Folgeanfragen wieder eingespielt. Die Nachrichten werden persistent in einer H2-Datei-Datenbank abgelegt (`./data/jclaw.mv.db`) und überleben so App-Neustarts.
 * **Plugins (Control-Plane):** Plugin-Manifeste im OpenClaw-Format (`openclaw.plugin.json`) sowie kompatible fremde Bundles (Agent Plugins, Codex, Claude, Cursor) werden gelesen und ohne Codeausführung validiert (Pflichtfelder, Schema-Struktur).
@@ -40,6 +41,7 @@ Das Projekt folgt der hexagonalen Struktur unter dem Package-Stamm `biz.brumm`:
 * **Fehlerbehandlung:** Ein globaler `@RestControllerAdvice` liefert bei ungültigen Anfragen (z. B. leerem Prompt) eine 400-Antwort mit Fehlermeldung.
 * **Tool-Policies (P1-08):** Per `jclaw.agent.tools.allow`/`.deny` lassen sich einzelne Werkzeuge für den Agenten freischalten bzw. sperren (Allow-/Denyliste, Deny-by-Default; Deny schlägt Allow). Deaktivierte Werkzeuge werden dem LLM nicht als Tool-Schema angeboten — analog zu OpenClaws `tools.allow`-Policy.
 * **Session-Konzept (P1-09):** Das ursprüngliche `contextId`-Memory wurde durch ein Session-Modell erweitert. Jeder Aufruf einer `contextId` löst automatisch eine Session auf (oder erstellt eine neue). Sessions haben einen generierten Titel (aus der ersten Nachricht, max. 60 Zeichen), Zeitstempel und unterstützen Reset-Strategien (`daily`, `idle`, `none`) über `jclaw.session.*`. Session-Metadaten werden persistent in einer H2-`session`-Tabelle gespeichert. Die Control-UI zeigt Sessions als eigene Navigation an mit Auswahl- und Löschfunktion.
+* **Spawn-Agent (P1-07):** Der Agent kann Sub-Agenten über `spawn_agent` starten, die eine Aufgabe eigenständig mit denselben Werkzeugen bearbeiten. Rekursionstiefe ist konfigurierbar begrenzt (Deny-by-Default).
 
 ## Voraussetzungen
 
@@ -101,6 +103,8 @@ Einstellungen in `src/main/resources/application.properties`:
 | `jclaw.agent.webtool.max-search-results` | `5` | Maximale Anzahl von Treffern pro Suche |
 | `jclaw.agent.tools.allow` | `-` (leer) | Allowliste der Tool-Namen (`readFile`, `runCommand`, `web_fetch`, MCP-Tools wie `math-server_add`, …). Leer = alle Tools erlaubt; gesetzt = nur die genannten Tools aktiv (Deny-by-Default) |
 | `jclaw.agent.tools.deny` | `-` (leer) | Denyliste der Tool-Namen. Leer = kein Tool gesperrt; **Deny schlägt Allow** |
+| `jclaw.agent.spawnagent.enabled` | `false` | Schaltet das `spawn_agent`-Werkzeug frei (Deny-by-Default) |
+| `jclaw.agent.spawnagent.max-depth` | `3` | Maximale Verschachtelungstiefe für Sub-Agenten (0 = unbegrenzt) |
 | `jclaw.session.reset-mode` | `none` | Session-Reset-Strategie: `none`, `daily` (reset pro Tag) oder `idle` (reset nach Inaktivität) |
 | `jclaw.session.reset-at-hour` | `4` | Stunde (0–23) für den `daily`-Reset (lokal) |
 | `jclaw.session.reset-idle-minutes` | `60` | Inaktivitätszeit in Minuten für den `idle`-Reset |
@@ -193,6 +197,23 @@ Sobald `jclaw.agent.shelltool.enabled=true` gesetzt ist, erhält der Agent das W
 * Die Ausgabe wird auf `jclaw.agent.shelltool.max-output-chars` Zeichen gekürzt; auch Exit-Codes werden gemeldet.
 
 **Sicherheitshinweis:** Shell-Ausführung ist mächtig und riskant. Standardmäßig ist das Werkzeug deaktiviert — aktivieren Sie es nur in kontrollierten Umgebungen.
+
+## Spawn-Agent (Multi-Agent)
+
+Sobald `jclaw.agent.spawnagent.enabled=true` gesetzt ist, erhält der Agent das Werkzeug `spawn_agent`:
+
+```properties
+jclaw.agent.spawnagent.enabled=true
+jclaw.agent.spawnagent.max-depth=3
+```
+
+* Der Agent kann mit `spawn_agent` einen Sub-Agenten starten, der eine Aufgabe eigenständig bearbeitet.
+* Der Sub-Agent erhält dieselben Werkzeuge wie der Haupt-Agent und führt den Agent-Loop mit eigener System-Prompt aus.
+* Optional kann eine `contextId` übergeben werden, um den Konversationskontext zu teilen; ohne Angabe wird ein frischer Kontext verwendet.
+* Die Rekursionstiefe ist durch `max-depth` begrenzt (Standard: 3), um endlose Verschachtelung zu verhindern.
+* Bei Erreichen des Limits oder bei Fehlern gibt das Werkzeug eine Fehlermeldung zurück.
+
+**Sicherheitshinweis:** `spawn_agent` ist mächtig und kann unerwartete Kosten verursachen. Standardmäßig ist das Werkzeug deaktiviert — aktivieren Sie es nur in kontrollierten Umgebungen.
 
 ## MCP-Server
 

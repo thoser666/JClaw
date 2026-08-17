@@ -12,7 +12,7 @@
 
     <groupId>biz.brumm</groupId>
     <artifactId>jclaw</artifactId>
-    <version>0.1.0-SNAPSHOT</version>
+    <version>0.1.0</version>
     <name>JClaw</name>
     <description>Java-Spring Port of OpenClaw with Ollama provider</description>
 
