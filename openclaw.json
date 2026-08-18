@@ -1,0 +1,35 @@
+# JClaw-Konfiguration (JSON5)
+# Kommentare sind erlaubt, Trailing Commas werden unterstützt.
+
+{
+  // Gateway-Einstellungen (nicht implementiert in Phase 1)
+  // "gateway": {
+  //   "host": "localhost",
+  //   "port": 8080
+  // },
+
+  "agents": {
+    "max-iterations": 8,
+    "max-history-messages": 10,
+    "plugins": { "dir": "./plugins" },
+    "skills": { "dir": "./skills", "enabled": [] },
+    "spawnagent": { "enabled": false, "max-depth": 3 }
+  },
+
+  "session": {
+    "reset-mode": "none",
+    "reset-at-hour": 4,
+    "reset-idle-minutes": 60
+  },
+
+  // MCP (Deny-by-Default)
+  "mcp": {
+    "enabled": false
+  }
+
+  // Tool-Policies (Deny-by-Default)
+  // "tools": {
+  //   "allow": "",
+  //   "deny": ""
+  // }
+}

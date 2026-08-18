@@ -65,7 +65,9 @@ docker run --rm -p 8080:8080 jclaw
 
 ## Konfiguration
 
-Einstellungen in `src/main/resources/application.properties`:
+Einstellungen in `src/main/resources/application.properties` oder in `openclaw.json` (JSON5-Format, P2-01):
+
+Die JSON5-Datei wird beim Start automatisch geladen und überschreibt Werte aus `application.properties`. Sie verwendet OpenClaw-kompatible Kurzschlüssel (z. B. `agents.max-iterations`), die automatisch auf Spring-Boot-Property-Namen gemappt werden.
 
 | Property | Default | Beschreibung |
 |---|---|---|
@@ -108,6 +110,33 @@ Einstellungen in `src/main/resources/application.properties`:
 | `jclaw.session.reset-mode` | `none` | Session-Reset-Strategie: `none`, `daily` (reset pro Tag) oder `idle` (reset nach Inaktivität) |
 | `jclaw.session.reset-at-hour` | `4` | Stunde (0–23) für den `daily`-Reset (lokal) |
 | `jclaw.session.reset-idle-minutes` | `60` | Inaktivitätszeit in Minuten für den `idle`-Reset |
+
+## JSON5-Konfiguration (P2-01/P2-02)
+
+Zusätzlich zu `application.properties` kann eine `openclaw.json`-Datei im Projektstamm verwendet werden (OpenClaw-kompatibel):
+
+```json5
+{
+  // Kommentare sind erlaubt
+  "agents": {
+    "max-iterations": 8,
+    "spawnagent": { "enabled": false, "max-depth": 3 }
+  },
+  "session": {
+    "reset-mode": "daily",   // none | daily | idle
+    "reset-at-hour": 4
+  },
+  "mcp": {
+    "enabled": false
+  }
+}
+```
+
+* Die JSON5-Datei wird beim Start automatisch als `EnvironmentPostProcessor` geladen.
+* **Kurzschlüssel** werden automatisch auf Spring-Boot-Property-Namen gemappt (z. B. `agents.max-iterations` → `jclaw.agent.max-iterations`).
+* **`${VAR}`-Substitution**: Werte können Umgebungsvariablen oder interne Referenzen enthalten.
+* **`$include`**: Dateien können per `$include: "base.json5"` eingebunden werden (relative Pfade).
+* **Strikte Validierung** (P2-02): Bei unbekannten Top-Level-Bereichen, ungültigen Session-Reset-Modi oder fehlerhaften Werten wird der Start verhindert.
 
 ## Skills
 
