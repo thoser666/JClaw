@@ -110,6 +110,7 @@ Die JSON5-Datei wird beim Start automatisch geladen und überschreibt Werte aus 
 | `jclaw.session.reset-mode` | `none` | Session-Reset-Strategie: `none`, `daily` (reset pro Tag) oder `idle` (reset nach Inaktivität) |
 | `jclaw.session.reset-at-hour` | `4` | Stunde (0–23) für den `daily`-Reset (lokal) |
 | `jclaw.session.reset-idle-minutes` | `60` | Inaktivitätszeit in Minuten für den `idle`-Reset |
+| `jclaw.config.hot-reload.enabled` | `false` | Auto-Reload der JSON5-Konfiguration bei Dateiänderungen (WatchService) |
 
 ## JSON5-Konfiguration (P2-01/P2-02)
 
@@ -137,6 +138,15 @@ Zusätzlich zu `application.properties` kann eine `openclaw.json`-Datei im Proje
 * **`${VAR}`-Substitution**: Werte können Umgebungsvariablen oder interne Referenzen enthalten.
 * **`$include`**: Dateien können per `$include: "base.json5"` eingebunden werden (relative Pfade).
 * **Strikte Validierung** (P2-02): Bei unbekannten Top-Level-Bereichen, ungültigen Session-Reset-Modi oder fehlerhaften Werten wird der Start verhindert.
+
+### Hot-Reload (P2-03)
+
+Die JSON5-Konfiguration kann zur Laufzeit neu geladen werden:
+
+* **Manuell:** `POST /api/v1/config.apply` — Liest die `openclaw.json` neu, validiert und aktualisiert die Spring-Environment.
+* **Automatisch:** Setze `jclaw.config.hot-reload.enabled=true` — `openclaw.json` wird über `WatchService` überwacht; Änderungen werden mit 500 ms Debounce automatisch geladen.
+
+Laufende Agents behalten ihre Konfiguration — nur neue Aufrufe verwenden die aktualisierten Werte.
 
 ## Skills
 

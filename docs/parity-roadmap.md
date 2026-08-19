@@ -63,7 +63,7 @@ Agent-Kern-Fähigkeiten, die OpenClaw zusätzlich bietet und die ohne JS möglic
 |---|---|---|---|---|
 | P2-01 | JSON5-Konfig | `openclaw.json`-Format (Kommentare, Trailing Commas), `$include`, `${VAR}`-Substitution | 🔴 | ✅ |
 | P2-02 | Schema-Validierung | Strikte Validierung; Gateway startet bei ungültiger Konfiguration nicht | 🔴 | ✅ |
-| P2-03 | Hot-Reload | Auto-Detect + manuelles `config.apply`; laufende Agents behalten ihre Config | 🟡 | ⬜ |
+| P2-03 | Hot-Reload | Auto-Detect + manuelles `config.apply`; laufende Agents behalten ihre Config | 🟡 | ✅ |
 | P2-04 | Gateway-Steuerung | Lokaler Kontrollserver: Sessions, Plugins, Hooks, Cron verwalten | 🟡 | ⬜ |
 | P2-05 | Control-UI | Web-Oberfläche (statische SPA, kein Build-Schritt) über die REST-API: Agent, Konversationen, Skills, Plugins | 🟢 | ✅ |
 | P2-06 | Auth | Gateway-Authentifizierung (API-Token) | 🟡 | ⬜ |
@@ -106,7 +106,7 @@ Die Bausteine werden nicht einzeln, sondern in Versionen mit einem in sich gesch
 | Version | Thema | Bausteine | Ziel / Wert |
 |---|---|---|---|
 | **0.1.0** | Agent-Kern | ~~P1-06~~ ✅ `apply_patch`, ~~P1-07~~ ✅ `spawn_agent`, ~~P1-08~~ ✅ Tool-Policies, ~~P1-09~~ ✅ Session-Konzept | Verlässlicher Einzel-Agent mit Policy-, Session- und Multi-Agent-Modell |
-| **0.2.0** | Konfiguration & Gateway | ~~P2-01~~ ✅ JSON5-Konfig, ~~P2-02~~ ✅ Schema-Validierung, P2-03 Hot-Reload, P2-04 Gateway-Steuerung, P2-06 Auth, P2-09 Color-Schemes | Steuerungsebene als Anker für Hooks, Cron und Channels |
+| **0.2.0** | Konfiguration & Gateway | ~~P2-01~~ ✅ JSON5-Konfig, ~~P2-02~~ ✅ Schema-Validierung, ~~P2-03~~ ✅ Hot-Reload, P2-04 Gateway-Steuerung, P2-06 Auth, P2-09 Color-Schemes | Steuerungsebene als Anker für Hooks, Cron und Channels |
 | **0.3.0** | Multi-Agent & Plugins | P1-07 `spawn_agent`, P4-01 Plugin-Laufzeit, P4-04 Provider-Abstraktion, P1-12 Cron | OpenClaw-Parität beim Agent-Verhalten |
 | **0.4.0** | Channels | P3-01 Channel-API, P3-02 Telegram, P3-03 Slack, P3-04 Discord, ~~P2-05~~ ✅ Control-UI | Nutzbares Multi-Plattform-Produkt |
 | **1.0.0** | 100 % Parität | P1-11 Hooks, P1-10 Compaction, P4-02 Memory, P4-03 Media, P4-05 Paritäts-Testsuite, P4-06 Skill Workshop, restliche Channels | Feature-Parität, erste stabile Version |
@@ -130,6 +130,8 @@ Anmerkungen:
 
 > **JSON5-Konfiguration (P2-01/P2-02) getroffen:** OpenClaw-kompatible `openclaw.json`-Datei wird beim Start geladen und als PropertySource in die Spring-Environment integriert (`EnvironmentPostProcessor`). Die JSON5-Datei verwendet Kurzschlüssel (z. B. `agents.max-iterations`), die automatisch auf Spring-Boot-Property-Namen gemappt werden (z. B. `jclaw.agent.max-iterations`). Unterstützt werden: Kommentare (`//`, `/* */`), Trailing Commas, `$include` für Datei-Einbindung, `${VAR}`-Substitution (intern + Umgebungsvariablen). Strikte Schema-Validierung (`Json5ConfigValidator`) prüft bei Start Top-Level-Bereiche, Session-Reset-Modi, Agent-Iterationen und MCP-Konfiguration — bei Fehlern wird der Start verhindert. Referenz: `de.marhali:json5-java:3.0.0` (Apache-2.0, keine Runtime-Dependencies).
 
+> **Hot-Reload (P2-03) getroffen:** `Json5ConfigWatcher` überwacht `openclaw.json` über `java.nio.file.WatchService` (plattformübergreifend). Bei Änderungen wird mit 500 ms Debounce ein `Json5ConfigReloadService`-Reload ausgelöst: Die Datei wird neu geladen, gegen das Schema validiert und die Spring-Environment-PropertySource wird aktualisiert (Ersetzen, kein Hinzufügen). Laufende Agents behalten ihre Konfiguration — nur neue Aufrufe verwenden die aktualisierten Werte. Manueller Reload via `POST /api/v1/config.apply` (REST-API). Feature ist deaktiviert per Default (`jclaw.config.hot-reload.enabled=false`). Konfigurationsverzeichnis wird über `jclaw.config.dir` oder Arbeitsverzeichnis ermittelt.
+
 > **Control-UI (P2-05) getroffen:** Bewusst **keine Framework-SPA** (kein Build-Schritt, keine externen CDN-Abhängigkeiten). Eine statische SPA in `src/main/resources/static/` (Vanilla-JS + `fetch`) bindet die vorhandene REST-API an (`POST /api/v1/tasks`, `GET /api/v1/skills`, `GET|DELETE /api/v1/conversations/{contextId}`, `GET /api/v1/plugins`). Die Gateway-/Session-Steuerung aus der ursprünglichen P2-05-Beschreibung bleibt Teil von P2-04. OpenClaws Control-UI ist seit **2026.7.1 session-first** (durchsuchbare Sessions, Gruppen, generierte Titel, Transcript-Export, Kontext-Verbrauch) — die Übernahme dieser Session-UI-Features ist Scope von P1-09/P2-04 und kein Blocker für P2-05.
 
 > **Color-Schemes (P2-09) getroffen:** Die Control-UI nutzt bereits CSS-Variablen (`:root` in `app.css`) — ein Dark-Theme kann als `@media (prefairs-color-scheme: dark)` oder als `.dark`-Klasse ergänzt werden. Umgesetzt wird P2-09 nach P2-04 (Gateway-Steuerung), sodass die UI vor dem Theme-Wechsel funktional stabil ist. Das Designsystem umfasst: Light-Theme (Standard), Dark-Theme ( Sidebar dunkel, Surface invertiert), manueller Toggle im Header, Persistenz der Präferenz in `localStorage`.
@@ -150,7 +152,6 @@ Ein Baustein gilt als paritätisch, wenn:
 
 ## Nächste Schritte
 
-1. **P2-03** Hot-Reload — Auto-Detect + manuelles `config.apply` für laufende Agents.
-2. **P2-04** Gateway-Steuerung — Session-Gruppen, Thread-Bindings, generierte Titel, Transcript-Export.
-3. **P2-09** Color-Schemes — Light/Dark-Theme für die Control-UI (nach P2-04, da UI danach funktional stabil).
-4. **P1-11** Hooks (`HOOK.md`-Scripts + Lifecycle-Events).
+1. **P2-04** Gateway-Steuerung — Session-Gruppen, Thread-Bindings, generierte Titel, Transcript-Export.
+2. **P2-09** Color-Schemes — Light/Dark-Theme für die Control-UI (nach P2-04, da UI danach funktional stabil).
+3. **P1-11** Hooks (`HOOK.md`-Scripts + Lifecycle-Events).
