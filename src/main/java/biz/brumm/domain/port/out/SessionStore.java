@@ -11,6 +11,8 @@ public interface SessionStore {
 
     List<Session> findAll();
 
+    List<Session> findByGroup(String group);
+
     Session save(Session session);
 
     void deleteById(String sessionId);

@@ -26,7 +26,7 @@ public class H2SessionStore implements SessionStore {
     @Override
     public Optional<Session> findById(String sessionId) {
         List<Session> results = jdbc.query(
-                "SELECT session_id, display_name, session_started_at, last_interaction_at, updated_at " +
+                "SELECT session_id, display_name, session_group, session_started_at, last_interaction_at, updated_at " +
                         "FROM session WHERE session_id = ?",
                 sessionRowMapper(), sessionId);
         return results.stream().findFirst();
@@ -35,24 +35,33 @@ public class H2SessionStore implements SessionStore {
     @Override
     public List<Session> findAll() {
         return jdbc.query(
-                "SELECT session_id, display_name, session_started_at, last_interaction_at, updated_at " +
+                "SELECT session_id, display_name, session_group, session_started_at, last_interaction_at, updated_at " +
                         "FROM session ORDER BY last_interaction_at DESC",
                 sessionRowMapper());
     }
 
     @Override
+    public List<Session> findByGroup(String group) {
+        return jdbc.query(
+                "SELECT session_id, display_name, session_group, session_started_at, last_interaction_at, updated_at " +
+                        "FROM session WHERE session_group = ? ORDER BY last_interaction_at DESC",
+                sessionRowMapper(), group);
+    }
+
+    @Override
     public Session save(Session session) {
         int updated = jdbc.update(
-                "UPDATE session SET display_name = ?, session_started_at = ?, last_interaction_at = ?, updated_at = ? " +
+                "UPDATE session SET display_name = ?, session_group = ?, session_started_at = ?, last_interaction_at = ?, updated_at = ? " +
                         "WHERE session_id = ?",
-                session.displayName(), toTimestamp(session.sessionStartedAt()),
-                toTimestamp(session.lastInteractionAt()), toTimestamp(session.updatedAt()),
+                session.displayName(), session.group(),
+                toTimestamp(session.sessionStartedAt()), toTimestamp(session.lastInteractionAt()),
+                toTimestamp(session.updatedAt()),
                 session.sessionId());
         if (updated == 0) {
             jdbc.update(
-                    "INSERT INTO session (session_id, display_name, session_started_at, last_interaction_at, updated_at) " +
-                            "VALUES (?, ?, ?, ?, ?)",
-                    session.sessionId(), session.displayName(),
+                    "INSERT INTO session (session_id, display_name, session_group, session_started_at, last_interaction_at, updated_at) " +
+                            "VALUES (?, ?, ?, ?, ?, ?)",
+                    session.sessionId(), session.displayName(), session.group(),
                     toTimestamp(session.sessionStartedAt()), toTimestamp(session.lastInteractionAt()),
                     toTimestamp(session.updatedAt()));
             log.info("Neue Session erstellt: '{}'.", session.sessionId());
@@ -72,6 +81,7 @@ public class H2SessionStore implements SessionStore {
         return (rs, rowNum) -> new Session(
                 rs.getString("session_id"),
                 rs.getString("display_name"),
+                rs.getString("session_group"),
                 rs.getTimestamp("session_started_at").toInstant(),
                 rs.getTimestamp("last_interaction_at").toInstant(),
                 rs.getTimestamp("updated_at").toInstant());

@@ -57,9 +57,25 @@ public class SessionService {
             displayName = deriveDisplayName(prompt);
         }
         Instant now = Instant.now();
-        Session updated = new Session(session.sessionId(), displayName,
+        Session updated = new Session(session.sessionId(), displayName, session.group(),
                 session.sessionStartedAt(), now, now);
         return sessionStore.save(updated);
+    }
+
+    public Session updateSessionGroup(String sessionId, String group) {
+        Optional<Session> existing = sessionStore.findById(sessionId);
+        if (existing.isEmpty()) {
+            throw new IllegalArgumentException("Session nicht gefunden: " + sessionId);
+        }
+        Session session = existing.get();
+        Instant now = Instant.now();
+        Session updated = new Session(session.sessionId(), session.displayName(), group,
+                session.sessionStartedAt(), session.lastInteractionAt(), now);
+        return sessionStore.save(updated);
+    }
+
+    public List<Session> listSessionsByGroup(String group) {
+        return sessionStore.findByGroup(group);
     }
 
     public boolean shouldReset(Session session) {

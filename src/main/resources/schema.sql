@@ -13,3 +13,5 @@ CREATE TABLE IF NOT EXISTS session (
     last_interaction_at TIMESTAMP NOT NULL,
     updated_at TIMESTAMP NOT NULL
 );
+
+ALTER TABLE session ADD COLUMN IF NOT EXISTS session_group VARCHAR(255);

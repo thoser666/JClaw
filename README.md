@@ -454,7 +454,7 @@ Unter `http://localhost:8080` liefert Spring Boot eine schlanke Web-Oberfläche 
 | Bereich | Funktion |
 |---|---|
 | **Agent** | Aufgabe + optionale `contextId` eingeben, Ausführung anstoßen; Antwort mit Anzahl der Iterationen und aufklappbaren Tool-Aufrufen |
-| **Sessions** | Verfügbare Sessions mit Titel und Zeitstempel auflisten; Klick auf eine Session lädt sie in den Agent; Session löschen |
+| **Sessions** | Verfügbare Sessions mit Titel und Zeitstempel auflisten; Klick auf eine Session lädt sie in den Agent; Session löschen; **Session-Gruppen** zuweisen |
 | **Konversationen** | Verlauf einer `contextId` laden (als Chat) und löschen |
 | **Skills** | Alle geladenen Skills mit Aktivierungsstatus |
 | **Plugins** | Erkannte Manifeste mit Typ, Version und Validierungsstatus |
@@ -462,6 +462,18 @@ Unter `http://localhost:8080` liefert Spring Boot eine schlanke Web-Oberfläche 
 Die UI rendert alle Daten ausschließlich über `textContent` (kein `innerHTML`-Einsatz für API-Daten) und zeigt API-Fehler (`{"error": …}`) direkt an. Auf Mobile (≤ 720 px) wechselt das Layout in eine gestapelte Darstellung. Die statischen Ressourcen werden von `ControlUiResourceTest` geprüft.
 
 **Color-Schemes (P2-09):** Die UI verwendet CSS-Variablen (`:root` in `app.css`) — ein Dark-Theme ist als `@media (prefairs-color-scheme: dark)` geplant. Der manuelle Toggle im Header und die Persistenz der Präferenz in `localStorage` werden nach P2-04 (Gateway-Steuerung) implementiert.
+
+### Gateway-Steuerung (P2-04)
+
+Zusätzlich zur Agent-API stehen Gateway-Endpoints zur Verfügung:
+
+| Endpoint | Methode | Beschreibung |
+|---|---|---|
+| `/api/v1/sessions?group={group}` | GET | Sessions nach Gruppe filtern |
+| `/api/v1/sessions/{id}/group` | PUT | Session-Gruppe setzen (`{"group": "work"}`) |
+| `/api/v1/sessions/{id}/transcript` | GET | Konversation als JSON-Array exportieren (`role`/`text`) |
+| `/api/v1/gateway/status` | GET | Gateway-Status (running, Uptime, Startzeit) |
+| `/api/v1/gateway/info` | GET | System-Informationen (Name, Version, Port, Konfiguration) |
 
 ## Tests
 
