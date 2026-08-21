@@ -95,6 +95,35 @@
         item.addEventListener("click", () => showPanel(item.dataset.panel));
     });
 
+    /* ---------- Theme (P2-09) ---------- */
+
+    const THEME_KEY = "jclaw-theme";
+    const themeToggle = $("#theme-toggle");
+    const themeIcon = $("#theme-icon");
+    const themeLabel = $("#theme-label");
+
+    function getPreferredTheme() {
+        const stored = localStorage.getItem(THEME_KEY);
+        if (stored === "dark" || stored === "light") return stored;
+        return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    }
+
+    function applyTheme(theme) {
+        document.documentElement.classList.toggle("dark", theme === "dark");
+        themeIcon.innerHTML = theme === "dark" ? "&#9790;" : "&#9788;";
+        themeLabel.textContent = theme === "dark" ? "Dark" : "Light";
+    }
+
+    function toggleTheme() {
+        const current = document.documentElement.classList.contains("dark") ? "dark" : "light";
+        const next = current === "dark" ? "light" : "dark";
+        localStorage.setItem(THEME_KEY, next);
+        applyTheme(next);
+    }
+
+    applyTheme(getPreferredTheme());
+    themeToggle.addEventListener("click", toggleTheme);
+
     /* ---------- Agent ---------- */
 
     const taskForm = $("#task-form");

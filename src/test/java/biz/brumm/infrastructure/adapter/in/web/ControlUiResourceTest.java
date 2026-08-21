@@ -45,6 +45,15 @@ class ControlUiResourceTest {
     }
 
     @Test
+    void indexContainsThemeToggle() throws Exception {
+        mockMvc.perform(get("/index.html"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("id=\"theme-toggle\"")))
+                .andExpect(content().string(containsString("id=\"theme-icon\"")))
+                .andExpect(content().string(containsString("id=\"theme-label\"")));
+    }
+
+    @Test
     void stylesheetIsServed() throws Exception {
         mockMvc.perform(get("/css/app.css"))
                 .andExpect(status().isOk())
@@ -53,10 +62,28 @@ class ControlUiResourceTest {
     }
 
     @Test
+    void stylesheetContainsDarkTheme() throws Exception {
+        mockMvc.perform(get("/css/app.css"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString(".dark")))
+                .andExpect(content().string(containsString("--bg: #0f1117")))
+                .andExpect(content().string(containsString("--surface: #1a1d27")));
+    }
+
+    @Test
     void scriptIsServed() throws Exception {
         mockMvc.perform(get("/js/app.js"))
                 .andExpect(status().isOk())
                 .andExpect(content().string(containsString("renderSkills")));
+    }
+
+    @Test
+    void scriptContainsThemeToggle() throws Exception {
+        mockMvc.perform(get("/js/app.js"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("toggleTheme")))
+                .andExpect(content().string(containsString("localStorage")))
+                .andExpect(content().string(containsString("jclaw-theme")));
     }
 
     @Test

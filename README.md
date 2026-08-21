@@ -461,7 +461,7 @@ Unter `http://localhost:8080` liefert Spring Boot eine schlanke Web-Oberfläche 
 
 Die UI rendert alle Daten ausschließlich über `textContent` (kein `innerHTML`-Einsatz für API-Daten) und zeigt API-Fehler (`{"error": …}`) direkt an. Auf Mobile (≤ 720 px) wechselt das Layout in eine gestapelte Darstellung. Die statischen Ressourcen werden von `ControlUiResourceTest` geprüft.
 
-**Color-Schemes (P2-09):** Die UI verwendet CSS-Variablen (`:root` in `app.css`) — ein Dark-Theme ist als `@media (prefairs-color-scheme: dark)` geplant. Der manuelle Toggle im Header und die Persistenz der Präferenz in `localStorage` werden nach P2-04 (Gateway-Steuerung) implementiert.
+**Color-Schemes (P2-09):** Die UI unterstützt Light- und Dark-Theme über CSS-Variablen. Der Theme-Toggle in der Sidebar wechselt zwischen den Themes; die Präferenz wird in `localStorage` persistiert. Das Dark-Theme invertiert Sidebar, Surface und Hintergrund mit angepassten Kontrasten.
 
 ### Gateway-Steuerung (P2-04)
 
