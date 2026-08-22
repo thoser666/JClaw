@@ -1,6 +1,6 @@
 # JClaw → OpenClaw-Parität: Roadmap
 
-Stand: 2026-08-17 · Basis: `docs/openclaw-compat.md` (Formatanalyse) · Referenz-Version: OpenClaw **2026.7.1** (Stable) / **2026.8.1-beta.2** (Betainhalt) · Ziel: **100 % Parität** zu OpenClaw.
+Stand: 2026-08-22 · Basis: `docs/openclaw-compat.md` (Formatanalyse) · Referenz-Version: OpenClaw **2026.7.1** (Stable) / **2026.8.1-beta.2** (Betainhalt) · Ziel: **100 % Parität** zu OpenClaw.
 
 ## Status-Legende
 
@@ -49,7 +49,7 @@ Agent-Kern-Fähigkeiten, die OpenClaw zusätzlich bietet und die ohne JS möglic
 | P1-05 | Web-Tools | `web_fetch` (mit `allowedDomains`-Policy) und `web_search` | 🟡 | ✅ |
 | P1-06 | Kern-Tool: Patch | `apply_patch` für strukturierte Datei-Änderungen | 🟡 | ✅ |
 | P1-07 | Kern-Tool: Agent | `spawn_agent` / Multi-Agent-Subprozesse (Deny-by-Default, max-depth-Limit) | 🟢 | ✅ |
-| P1-08 | Tool-Policies | Allow-/Denyliste je Agent via `jclaw.agent.tools.allow`/`.deny` (Deny-by-Default, Deny schlägt Allow; deaktivierte Tools erscheinen nicht im Tool-Schema). `toolMetadata.autoApproved` erst mit Approval-Flow (P2-06) relevant | 🟡 | ✅ |
+| P1-08 | Tool-Policies | Allow-/Denyliste je Agent via `jclaw.agent.tools.allow`/`.deny` (Deny-by-Default, Deny schlägt Allow; deaktivierte Tools erscheinen nicht im Tool-Schema) | 🟡 | ✅ |
 | P1-09 | Session-Konzept | Von `contextId` auf Sessions erweitern (Reset-Strategien `daily`/`idle`, generierte Titel, REST-API); Session-first-UI seit 2026.7.1 als Referenz. Scope-Abgrenzung: Thread-Bindings, dmScope, Session-Gruppen, Transcript-Export und Kontext-Verbrauch sind P2-04 (Gateway) | 🟡 | ✅ |
 | P1-10 | Compaction | Kontext-Kompression bei Session-Grenzen | 🟢 | ⬜ |
 | P1-11 | Hooks | `HOOK.md`-Scripts + Lifecycle-Events (before_tool_call, before_agent_run, …) via Script-Runner; Hook-Stage-Migration beachten (`before_agent_start`/SDK-Root-Imports seit 2026.6.34 entfernt) | 🟡 | ⬜ |
@@ -122,7 +122,7 @@ Anmerkungen:
 
 > **Web-Tools (P1-05) getroffen:** `web_fetch` mit `allowedDomains`-Policy (Subdomains erlaubt, nur http/https, Größenlimit) und `web_search` über einen konfigurierbaren Such-Endpoint (Standard: DuckDuckGo Instant Answer, `jclaw.agent.webtool.search-endpoint`). Beide sind Deny-by-Default (`jclaw.agent.webtool.enabled`).
 
-> **Tool-Policies (P1-08) getroffen:** OpenClaws `tools.allow`-Semantik ist als `jclaw.agent.tools.allow`/`.deny` umgesetzt. Ein `ToolPolicy`-Port (`domain.port.out`) mit `DefaultToolPolicy` (Properties-gestützt) entscheidet zentral, welche Tools aktiv sind; `OllamaAiAdapter` filtert die Spring-AI-`ToolCallback`s (inkl. MCP-Tools) beim Bauen, sodass deaktivierte Werkzeuge nie im Tool-Schema des Modells auftauchen. `toolMetadata.autoApproved` bleibt ausgesetzt, bis es einen Approval-Flow gibt (P2-06 Gateway-Auth / Human-in-the-Loop).
+> **Tool-Policies (P1-08) getroffen:** OpenClaws `tools.allow`-Semantik ist als `jclaw.agent.tools.allow`/`.deny` umgesetzt. Ein `ToolPolicy`-Port (`domain.port.out`) mit `DefaultToolPolicy` (Properties-gestützt) entscheidet zentral, welche Tools aktiv sind; `OllamaAiAdapter` filtert die Spring-AI-`ToolCallback`s (inkl. MCP-Tools) beim Bauen, sodass deaktivierte Werkzeuge nie im Tool-Schema des Modells auftauchen. `toolMetadata.autoApproved` ist mit Auth (P2-06) verfügbar — Token-geschützte Endpunkte können auto-approved Tools erlauben.
 
 > **Session-Konzept (P1-09) getroffen:** Session-first-UI (2026.7.1) als Referenz. Umgesetzt mit `Session`-Record (sessionId, displayName, sessionStartedAt, lastInteractionAt, updatedAt), `SessionStore`-Port und `H2SessionStore`-Implementierung (`session`-Tabelle in H2). `SessionService` verwaltet Session-Metadaten, Reset-Logik (`daily`/`idle`/`none` via `jclaw.session.*`) und leitet `displayName` aus der ersten Nachricht ab (max. 60 Zeichen). `ClawAgentService` löst Sessions beim Task-Call auf (per `contextId`), erstellt neue Sessions wenn keine existiert und prüft beim Touch ob ein Reset nötig ist. `AgentResponse` enthält jetzt `sessionId`. REST-API: `GET /api/v1/sessions`, `GET|DELETE /api/v1/sessions/{sessionId}`. Scope-Abgrenzung: Thread-Bindings, `dmScope`, Session-Gruppen, generierte Titel, Transcript-Export und Kontext-Verbrauch — diese Features sind Scope von P2-04 (Gateway-Steuerung) und P3 (Channels).
 
@@ -136,13 +136,7 @@ Anmerkungen:
 
 > **Auth (P2-06) getroffen:** Bearer-Token-Authentifizierung über `Authorization`-Header. API-Token werden als SHA-256-Hash in einer H2-`api_key`-Tabelle gespeichert (Token selbst wird nur einmalig bei Erstellung angezeigt). `AuthInterceptor` (Spring `HandlerInterceptor`) prüft bei `/api/**`-Anfragen den Token; konfigurierbare öffentliche Pfade (`jclaw.auth.public-paths`) für Health-Checks und Static Resources. Feature ist deaktiviert per Default (`jclaw.auth.enabled=false`). Token-Verwaltung über REST-API: `GET/POST /api/v1/auth/tokens`, `DELETE /api/v1/auth/tokens/{id}`. Auth-Endpoint ist immer ohne Token erreichbar (Self-Service).
 
-> **Control-UI (P2-05) getroffen:** Bewusst **keine Framework-SPA** (kein Build-Schritt, keine externen CDN-Abhängigkeiten). Eine statische SPA in `src/main/resources/static/` (Vanilla-JS + `fetch`) bindet die vorhandene REST-API an (`POST /api/v1/tasks`, `GET /api/v1/skills`, `GET|DELETE /api/v1/conversations/{contextId}`, `GET /api/v1/plugins`). Die Gateway-/Session-Steuerung aus der ursprünglichen P2-05-Beschreibung bleibt Teil von P2-04. OpenClaws Control-UI ist seit **2026.7.1 session-first** (durchsuchbare Sessions, Gruppen, generierte Titel, Transcript-Export, Kontext-Verbrauch) — die Übernahme dieser Session-UI-Features ist Scope von P1-09/P2-04 und kein Blocker für P2-05.
-
-> **Gateway-Steuerung (P2-04) getroffen:** Session-Gruppen über `session_group`-Feld in der H2-`session`-Tabelle (Schema-Migration via `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`). REST-API: `PUT /api/v1/sessions/{id}/group` zum Setzen der Gruppe, `GET /api/v1/sessions?group=...` zum Filtern. Transcript-Export via `GET /api/v1/sessions/{id}/transcript` (JSON-Array mit `role`/`text`). Gateway-Status (`GET /api/v1/gateway/status`: Status, Uptime, Startzeit) und System-Info (`GET /api/v1/gateway/info`: Name, Version, Port, Konfiguration). Laufende Agents behalten ihre Konfiguration — die Gateway-API ist zusätzliche Steuerungsebene.
-
-> **Color-Schemes (P2-09) getroffen:** Die Control-UI nutzt bereits CSS-Variablen (`:root` in `app.css`) — ein Dark-Theme kann als `@media (prefairs-color-scheme: dark)` oder als `.dark`-Klasse ergänzt werden. Umgesetzt wird P2-09 nach P2-04 (Gateway-Steuerung), sodass die UI vor dem Theme-Wechsel funktional stabil ist. Das Designsystem umfasst: Light-Theme (Standard), Dark-Theme ( Sidebar dunkel, Surface invertiert), manueller Toggle im Header, Persistenz der Präferenz in `localStorage`.
-
-> **Plugin-SDK-Stand (2026.6.34):** `before_agent_start`, Root-`openclaw/plugin-sdk`-Imports, `providerAuthEnvVars`/`channelEnvVars` werden nach dem 24.07.2026 entfernt. Die Node-Sidecar-Laufzeit (P4-01) muss gegen den **aktuellen** SDK-Stand bauen (Subpath-Imports, moderne Hook-Stages, `setup`-Deskriptoren); Details in `openclaw-compat.md` §3. Der Versionsstand der Referenz (2026.7.1 Stable / 2026.8.1-beta.2) ist in `openclaw-compat.md` §1.1 dokumentiert.
+> **Control-UI (P2-05) getroffen:** `before_agent_start`, Root-`openclaw/plugin-sdk`-Imports, `providerAuthEnvVars`/`channelEnvVars` werden nach dem 24.07.2026 entfernt. Die Node-Sidecar-Laufzeit (P4-01) muss gegen den **aktuellen** SDK-Stand bauen (Subpath-Imports, moderne Hook-Stages, `setup`-Deskriptoren); Details in `openclaw-compat.md` §3. Der Versionsstand der Referenz (2026.7.1 Stable / 2026.8.1-beta.2) ist in `openclaw-compat.md` §1.1 dokumentiert.
 
 > Die Plugin-Laufzeit-Entscheidung (Node-Sidecar vs. GraalJS vs. Java-Reimplementation) ist getroffen: **Node-Sidecar**, siehe [ADR-0001](adr/0001-node-sidecar-plugin-runtime.md). Das Bridge-Protokoll ist vollständig spezifiziert (siehe [bridge-protocol.md](bridge-protocol.md), P1-03).
 
