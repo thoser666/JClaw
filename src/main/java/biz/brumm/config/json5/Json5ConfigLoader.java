@@ -54,6 +54,19 @@ public class Json5ConfigLoader {
      * @throws IOException bei Lesefehlern oder ungültigem JSON5
      */
     public static Map<String, String> load(Path basePath, String fileName) throws IOException {
+        return mapToSpringProperties(loadRaw(basePath, fileName));
+    }
+
+    /**
+     * Lädt die angegebene JSON5-Datei und gibt die rohen Properties (vor dem Mapping)
+     * zurück. Die Keys verwenden die JSON5-Kurzschlüssel (z. B. {@code agents.max-iterations}).
+     *
+     * @param basePath Verzeichnis, in dem die Datei liegt (für relative $include-Pfade)
+     * @param fileName Name der JSON5-Datei (z. B. {@code openclaw.json})
+     * @return Flache Map mit JSON5-Kurzschlüsseln (vor dem Spring-Boot-Mapping)
+     * @throws IOException bei Lesefehlern oder ungültigem JSON5
+     */
+    public static Map<String, String> loadRaw(Path basePath, String fileName) throws IOException {
         Path filePath = basePath.resolve(fileName);
         if (!Files.exists(filePath)) {
             log.info("JSON5-Konfigurationsdatei nicht gefunden: {} — übersprungen.", filePath.toAbsolutePath());
@@ -77,11 +90,8 @@ public class Json5ConfigLoader {
         // ${VAR}-Substitution
         Map<String, String> resolved = resolveVariables(raw);
 
-        // Zu Spring-Boot-Properties mappen (jclaw.-Prefix ergänzen)
-        Map<String, String> springProps = mapToSpringProperties(resolved);
-
-        log.info("JSON5-Konfiguration geladen: {} Eigenschaften.", springProps.size());
-        return springProps;
+        log.info("JSON5-Konfiguration geladen: {} Eigenschaften.", resolved.size());
+        return resolved;
     }
 
     private static void flatten(Json5Object obj, String prefix, Map<String, String> target) {
