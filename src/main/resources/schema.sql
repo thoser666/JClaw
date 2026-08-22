@@ -15,3 +15,12 @@ CREATE TABLE IF NOT EXISTS session (
 );
 
 ALTER TABLE session ADD COLUMN IF NOT EXISTS session_group VARCHAR(255);
+
+CREATE TABLE IF NOT EXISTS api_key (
+    id VARCHAR(255) PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    token_hash VARCHAR(255) NOT NULL,
+    created_at TIMESTAMP NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_api_key_token_hash ON api_key(token_hash);

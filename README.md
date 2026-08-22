@@ -111,6 +111,8 @@ Die JSON5-Datei wird beim Start automatisch geladen und überschreibt Werte aus 
 | `jclaw.session.reset-at-hour` | `4` | Stunde (0–23) für den `daily`-Reset (lokal) |
 | `jclaw.session.reset-idle-minutes` | `60` | Inaktivitätszeit in Minuten für den `idle`-Reset |
 | `jclaw.config.hot-reload.enabled` | `false` | Auto-Reload der JSON5-Konfiguration bei Dateiänderungen (WatchService) |
+| `jclaw.auth.enabled` | `false` | API-Token-Authentifizierung für alle `/api/**`-Endpunkte |
+| `jclaw.auth.public-paths` | `-` (leer) | Öffentliche Pfade ohne Auth (z. B. `/api/v1/gateway/status`) |
 
 ## JSON5-Konfiguration (P2-01/P2-02)
 
@@ -474,6 +476,18 @@ Zusätzlich zur Agent-API stehen Gateway-Endpoints zur Verfügung:
 | `/api/v1/sessions/{id}/transcript` | GET | Konversation als JSON-Array exportieren (`role`/`text`) |
 | `/api/v1/gateway/status` | GET | Gateway-Status (running, Uptime, Startzeit) |
 | `/api/v1/gateway/info` | GET | System-Informationen (Name, Version, Port, Konfiguration) |
+| `/api/v1/auth/tokens` | GET | Alle API-Token auflisten (ohne Token-Werte) |
+| `/api/v1/auth/tokens` | POST | Neuen API-Token erstellen (`{"name": "..."}`) |
+| `/api/v1/auth/tokens/{id}` | DELETE | API-Token löschen |
+
+### Auth (P2-06)
+
+API-Token-Authentifizierung für die REST-API:
+
+* **Aktivieren:** `jclaw.auth.enabled=true` in `application.properties` oder `openclaw.json`
+* **Token erstellen:** `POST /api/v1/auth/tokens` mit `{"name": "mein-token"}` — gibt das rohe Token nur einmalig zurück
+* **Token verwenden:** `Authorization: Bearer <token>` in HTTP-Headern
+* **Öffentliche Pfade:** `/api/v1/gateway/status`, Static Resources, Auth-Endpunkte sind immer ohne Token erreichbar
 
 ## Tests
 

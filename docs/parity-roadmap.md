@@ -66,7 +66,7 @@ Agent-Kern-Fähigkeiten, die OpenClaw zusätzlich bietet und die ohne JS möglic
 | P2-03 | Hot-Reload | Auto-Detect + manuelles `config.apply`; laufende Agents behalten ihre Config | 🟡 | ✅ |
 | P2-04 | Gateway-Steuerung | Session-Gruppen, Transcript-Export, Gateway-Status- & Info-API | 🟡 | ✅ |
 | P2-05 | Control-UI | Web-Oberfläche (statische SPA, kein Build-Schritt) über die REST-API: Agent, Konversationen, Skills, Plugins | 🟢 | ✅ |
-| P2-06 | Auth | Gateway-Authentifizierung (API-Token) | 🟡 | ⬜ |
+| P2-06 | Auth | Gateway-Authentifizierung (API-Token, Bearer-Header, SHA-256-Hash, Deny-by-Default) | 🟡 | ✅ |
 | P2-09 | Color-Schemes | Light/Dark-Theme via CSS-Variablen (`prefers-color-scheme` + manueller Toggle), Designsystem für die Control-UI | 🟡 | ✅ |
 
 ---
@@ -106,7 +106,7 @@ Die Bausteine werden nicht einzeln, sondern in Versionen mit einem in sich gesch
 | Version | Thema | Bausteine | Ziel / Wert |
 |---|---|---|---|
 | **0.1.0** | Agent-Kern | ~~P1-06~~ ✅ `apply_patch`, ~~P1-07~~ ✅ `spawn_agent`, ~~P1-08~~ ✅ Tool-Policies, ~~P1-09~~ ✅ Session-Konzept | Verlässlicher Einzel-Agent mit Policy-, Session- und Multi-Agent-Modell |
-| **0.2.0** | Konfiguration & Gateway | ~~P2-01~~ ✅ JSON5-Konfig, ~~P2-02~~ ✅ Schema-Validierung, ~~P2-03~~ ✅ Hot-Reload, ~~P2-04~~ ✅ Gateway-Steuerung, P2-06 Auth, ~~P2-09~~ ✅ Color-Schemes | Steuerungsebene als Anker für Hooks, Cron und Channels |
+| **0.2.0** | Konfiguration & Gateway | ~~P2-01~~ ✅ JSON5-Konfig, ~~P2-02~~ ✅ Schema-Validierung, ~~P2-03~~ ✅ Hot-Reload, ~~P2-04~~ ✅ Gateway-Steuerung, ~~P2-06~~ ✅ Auth, ~~P2-09~~ ✅ Color-Schemes | Steuerungsebene als Anker für Hooks, Cron und Channels |
 | **0.3.0** | Multi-Agent & Plugins | P1-07 `spawn_agent`, P4-01 Plugin-Laufzeit, P4-04 Provider-Abstraktion, P1-12 Cron | OpenClaw-Parität beim Agent-Verhalten |
 | **0.4.0** | Channels | P3-01 Channel-API, P3-02 Telegram, P3-03 Slack, P3-04 Discord, ~~P2-05~~ ✅ Control-UI | Nutzbares Multi-Plattform-Produkt |
 | **1.0.0** | 100 % Parität | P1-11 Hooks, P1-10 Compaction, P4-02 Memory, P4-03 Media, P4-05 Paritäts-Testsuite, P4-06 Skill Workshop, restliche Channels | Feature-Parität, erste stabile Version |
@@ -134,6 +134,8 @@ Anmerkungen:
 
 > **Hot-Reload (P2-03) getroffen:** `Json5ConfigWatcher` überwacht `openclaw.json` über `java.nio.file.WatchService` (plattformübergreifend). Bei Änderungen wird mit 500 ms Debounce ein `Json5ConfigReloadService`-Reload ausgelöst: Die Datei wird neu geladen, gegen das Schema validiert und die Spring-Environment-PropertySource wird aktualisiert (Ersetzen, kein Hinzufügen). Laufende Agents behalten ihre Konfiguration — nur neue Aufrufe verwenden die aktualisierten Werte. Manueller Reload via `POST /api/v1/config.apply` (REST-API). Feature ist deaktiviert per Default (`jclaw.config.hot-reload.enabled=false`). Konfigurationsverzeichnis wird über `jclaw.config.dir` oder Arbeitsverzeichnis ermittelt.
 
+> **Auth (P2-06) getroffen:** Bearer-Token-Authentifizierung über `Authorization`-Header. API-Token werden als SHA-256-Hash in einer H2-`api_key`-Tabelle gespeichert (Token selbst wird nur einmalig bei Erstellung angezeigt). `AuthInterceptor` (Spring `HandlerInterceptor`) prüft bei `/api/**`-Anfragen den Token; konfigurierbare öffentliche Pfade (`jclaw.auth.public-paths`) für Health-Checks und Static Resources. Feature ist deaktiviert per Default (`jclaw.auth.enabled=false`). Token-Verwaltung über REST-API: `GET/POST /api/v1/auth/tokens`, `DELETE /api/v1/auth/tokens/{id}`. Auth-Endpoint ist immer ohne Token erreichbar (Self-Service).
+
 > **Control-UI (P2-05) getroffen:** Bewusst **keine Framework-SPA** (kein Build-Schritt, keine externen CDN-Abhängigkeiten). Eine statische SPA in `src/main/resources/static/` (Vanilla-JS + `fetch`) bindet die vorhandene REST-API an (`POST /api/v1/tasks`, `GET /api/v1/skills`, `GET|DELETE /api/v1/conversations/{contextId}`, `GET /api/v1/plugins`). Die Gateway-/Session-Steuerung aus der ursprünglichen P2-05-Beschreibung bleibt Teil von P2-04. OpenClaws Control-UI ist seit **2026.7.1 session-first** (durchsuchbare Sessions, Gruppen, generierte Titel, Transcript-Export, Kontext-Verbrauch) — die Übernahme dieser Session-UI-Features ist Scope von P1-09/P2-04 und kein Blocker für P2-05.
 
 > **Gateway-Steuerung (P2-04) getroffen:** Session-Gruppen über `session_group`-Feld in der H2-`session`-Tabelle (Schema-Migration via `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`). REST-API: `PUT /api/v1/sessions/{id}/group` zum Setzen der Gruppe, `GET /api/v1/sessions?group=...` zum Filtern. Transcript-Export via `GET /api/v1/sessions/{id}/transcript` (JSON-Array mit `role`/`text`). Gateway-Status (`GET /api/v1/gateway/status`: Status, Uptime, Startzeit) und System-Info (`GET /api/v1/gateway/info`: Name, Version, Port, Konfiguration). Laufende Agents behalten ihre Konfiguration — die Gateway-API ist zusätzliche Steuerungsebene.
@@ -156,6 +158,6 @@ Ein Baustein gilt als paritätisch, wenn:
 
 ## Nächste Schritte
 
-1. **P2-06** Auth — Gateway-Authentifizierung (API-Token).
-2. **P1-11** Hooks (`HOOK.md`-Scripts + Lifecycle-Events).
-3. **P1-10** Compaction — Kontext-Kompression bei Session-Grenzen.
+1. **P1-11** Hooks (`HOOK.md`-Scripts + Lifecycle-Events).
+2. **P1-10** Compaction — Kontext-Kompression bei Session-Grenzen.
+3. **P1-12** Cron-Jobs — Wiederkehrende Agent-Jobs.
