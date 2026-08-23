@@ -111,6 +111,9 @@ Die JSON5-Datei wird beim Start automatisch geladen und überschreibt Werte aus 
 | `jclaw.session.reset-at-hour` | `4` | Stunde (0–23) für den `daily`-Reset (lokal) |
 | `jclaw.session.reset-idle-minutes` | `60` | Inaktivitätszeit in Minuten für den `idle`-Reset |
 | `jclaw.config.hot-reload.enabled` | `false` | Auto-Reload der JSON5-Konfiguration bei Dateiänderungen (WatchService) |
+| `jclaw.hooks.enabled` | `false` | Lifecycle-Hooks via `HOOK.md`-Scripts (Deny-by-Default) |
+| `jclaw.hooks.dir` | `./hooks` | Verzeichnis mit Hook-Ordnern (`HOOK.md`) |
+| `jclaw.hooks.script-timeout` | `30` | Timeout für Script-Ausführungen in Sekunden |
 | `jclaw.auth.enabled` | `false` | API-Token-Authentifizierung für alle `/api/**`-Endpunkte |
 | `jclaw.auth.public-paths` | `-` (leer) | Öffentliche Pfade ohne Auth (z. B. `/api/v1/gateway/status`) |
 
@@ -488,6 +491,17 @@ API-Token-Authentifizierung für die REST-API:
 * **Token erstellen:** `POST /api/v1/auth/tokens` mit `{"name": "mein-token"}` — gibt das rohe Token nur einmalig zurück
 * **Token verwenden:** `Authorization: Bearer <token>` in HTTP-Headern
 * **Öffentliche Pfade:** `/api/v1/gateway/status`, Static Resources, Auth-Endpunkte sind immer ohne Token erreichbar
+
+### Hooks (P1-11)
+
+Lifecycle-Hooks via `HOOK.md`-Scripts:
+
+* **Aktivieren:** `jclaw.hooks.enabled=true` in `application.properties` oder `openclaw.json`
+* **HOOK.md-Format:** YAML-Frontmatter mit `name`, `stage`, `priority`, `script` (optional)
+* **Stages:** `gateway_start`, `gateway_stop`, `before_agent_run`, `after_agent_run`, `before_tool_call`, `after_tool_call`
+* **Script-Ausführung:** `ProcessBuilder` mit `JCLAW_HOOK_*`-Umgebungsvariablen; Exit-Code 0 = proceed, alles andere = block
+* **Priorität:** Hooks werden absteigend nach `priority` ausgeführt (höher = früher)
+* **Timeout:** `jclaw.hooks.script-timeout` (Standard: 30s)
 
 ## Tests
 

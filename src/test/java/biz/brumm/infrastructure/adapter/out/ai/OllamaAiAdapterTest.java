@@ -69,7 +69,10 @@ class OllamaAiAdapterTest {
 
     private OllamaAiAdapter adapter(List<AgentTool> tools, ChatMemory memory, ToolPolicy policy) {
         when(chatModel.getOptions()).thenReturn(OllamaChatOptions.builder().model("qwen3:8b").build());
-        return new OllamaAiAdapter(chatModel, toolCallingManager, tools, mcpToolRegistryProvider, memory, policy);
+        @SuppressWarnings("unchecked")
+        ObjectProvider<biz.brumm.domain.port.out.HookCallback> hookProvider = mock(ObjectProvider.class);
+        when(hookProvider.getIfAvailable()).thenReturn(null);
+        return new OllamaAiAdapter(chatModel, toolCallingManager, tools, mcpToolRegistryProvider, memory, policy, hookProvider);
     }
 
     private MessageWindowChatMemory newMemory() {

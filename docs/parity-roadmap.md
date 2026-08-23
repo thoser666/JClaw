@@ -1,6 +1,6 @@
 # JClaw → OpenClaw-Parität: Roadmap
 
-Stand: 2026-08-22 · Basis: `docs/openclaw-compat.md` (Formatanalyse) · Referenz-Version: OpenClaw **2026.7.1** (Stable) / **2026.8.1-beta.2** (Betainhalt) · Ziel: **100 % Parität** zu OpenClaw.
+Stand: 2026-08-23 · Basis: `docs/openclaw-compat.md` (Formatanalyse) · Referenz-Version: OpenClaw **2026.7.1** (Stable) / **2026.8.1-beta.2** (Betainhalt) · Ziel: **100 % Parität** zu OpenClaw.
 
 ## Status-Legende
 
@@ -36,9 +36,9 @@ Hexagonale Basis, damit alle weiteren Bausteine aufsetzen können.
 
 ---
 
-## Phase 1 — Kern-Parität (aktuell)
+## Phase 1 — Kern-Parität (fast abgeschlossen)
 
-Agent-Kern-Fähigkeiten, die OpenClaw zusätzlich bietet und die ohne JS möglich sind.
+Agent-Kern-Fähigkeiten, die OpenClaw zusätzlich bietet und die ohne JS möglich sind. Nur P1-10 (Compaction) und P1-12 (Cron-Jobs) stehen noch aus.
 
 | ID | Baustein | Beschreibung | Priorität | Status |
 |---|---|---|---|---|
@@ -52,7 +52,7 @@ Agent-Kern-Fähigkeiten, die OpenClaw zusätzlich bietet und die ohne JS möglic
 | P1-08 | Tool-Policies | Allow-/Denyliste je Agent via `jclaw.agent.tools.allow`/`.deny` (Deny-by-Default, Deny schlägt Allow; deaktivierte Tools erscheinen nicht im Tool-Schema) | 🟡 | ✅ |
 | P1-09 | Session-Konzept | Von `contextId` auf Sessions erweitern (Reset-Strategien `daily`/`idle`, generierte Titel, REST-API); Session-first-UI seit 2026.7.1 als Referenz. Scope-Abgrenzung: Thread-Bindings, dmScope, Session-Gruppen, Transcript-Export und Kontext-Verbrauch sind P2-04 (Gateway) | 🟡 | ✅ |
 | P1-10 | Compaction | Kontext-Kompression bei Session-Grenzen | 🟢 | ⬜ |
-| P1-11 | Hooks | `HOOK.md`-Scripts + Lifecycle-Events (before_tool_call, before_agent_run, …) via Script-Runner; Hook-Stage-Migration beachten (`before_agent_start`/SDK-Root-Imports seit 2026.6.34 entfernt) | 🟡 | ⬜ |
+| P1-11 | Hooks | `HOOK.md`-Scripts + Lifecycle-Events (before_tool_call, before_agent_run, …) via Script-Runner; Hook-Stage-Migration beachten (`before_agent_start`/SDK-Root-Imports seit 2026.6.34 entfernt) | 🟡 | ✅ |
 | P1-12 | Cron-Jobs | Wiederkehrende Agent-Jobs (`cron.*`-Konfiguration) | 🟢 | ⬜ |
 
 ---
@@ -109,7 +109,7 @@ Die Bausteine werden nicht einzeln, sondern in Versionen mit einem in sich gesch
 | **0.2.0** | Konfiguration & Gateway | ~~P2-01~~ ✅ JSON5-Konfig, ~~P2-02~~ ✅ Schema-Validierung, ~~P2-03~~ ✅ Hot-Reload, ~~P2-04~~ ✅ Gateway-Steuerung, ~~P2-06~~ ✅ Auth, ~~P2-09~~ ✅ Color-Schemes | Steuerungsebene als Anker für Hooks, Cron und Channels |
 | **0.3.0** | Multi-Agent & Plugins | P1-07 `spawn_agent`, P4-01 Plugin-Laufzeit, P4-04 Provider-Abstraktion, P1-12 Cron | OpenClaw-Parität beim Agent-Verhalten |
 | **0.4.0** | Channels | P3-01 Channel-API, P3-02 Telegram, P3-03 Slack, P3-04 Discord, ~~P2-05~~ ✅ Control-UI | Nutzbares Multi-Plattform-Produkt |
-| **1.0.0** | 100 % Parität | P1-11 Hooks, P1-10 Compaction, P4-02 Memory, P4-03 Media, P4-05 Paritäts-Testsuite, P4-06 Skill Workshop, restliche Channels | Feature-Parität, erste stabile Version |
+| **1.0.0** | 100 % Parität | ~~P1-11~~ ✅ Hooks, P1-10 Compaction, P4-02 Memory, P4-03 Media, P4-05 Paritäts-Testsuite, P4-06 Skill Workshop, restliche Channels | Feature-Parität, erste stabile Version |
 
 Anmerkungen:
 
@@ -136,7 +136,11 @@ Anmerkungen:
 
 > **Auth (P2-06) getroffen:** Bearer-Token-Authentifizierung über `Authorization`-Header. API-Token werden als SHA-256-Hash in einer H2-`api_key`-Tabelle gespeichert (Token selbst wird nur einmalig bei Erstellung angezeigt). `AuthInterceptor` (Spring `HandlerInterceptor`) prüft bei `/api/**`-Anfragen den Token; konfigurierbare öffentliche Pfade (`jclaw.auth.public-paths`) für Health-Checks und Static Resources. Feature ist deaktiviert per Default (`jclaw.auth.enabled=false`). Token-Verwaltung über REST-API: `GET/POST /api/v1/auth/tokens`, `DELETE /api/v1/auth/tokens/{id}`. Auth-Endpoint ist immer ohne Token erreichbar (Self-Service).
 
-> **Control-UI (P2-05) getroffen:** `before_agent_start`, Root-`openclaw/plugin-sdk`-Imports, `providerAuthEnvVars`/`channelEnvVars` werden nach dem 24.07.2026 entfernt. Die Node-Sidecar-Laufzeit (P4-01) muss gegen den **aktuellen** SDK-Stand bauen (Subpath-Imports, moderne Hook-Stages, `setup`-Deskriptoren); Details in `openclaw-compat.md` §3. Der Versionsstand der Referenz (2026.7.1 Stable / 2026.8.1-beta.2) ist in `openclaw-compat.md` §1.1 dokumentiert.
+> **Control-UI (P2-05) getroffen:** Bewusst **keine Framework-SPA** (kein Build-Schritt, keine externen CDN-Abhängigkeiten). Eine statische SPA in `src/main/resources/static/` (Vanilla-JS + `fetch`) bindet die vorhandene REST-API an.
+
+> **Hooks (P1-11) getroffen:** `HOOK.md`-Scripts mit YAML-Frontmatter (`name`, `stage`, `priority`, `script`) im konfigurierten Hook-Verzeichnis. `FileHookProvider` liest und parsed die Hooks, `HookScriptExecutor` führt Scripts via `ProcessBuilder` aus (Umgebungsvariablen `JCLAW_HOOK_*`, Exit-Code 0 = proceed). `HookService` orchestriert die Ausführung (sequenziell, absteigend nach Priorität, Blockierung möglich). Integration auf zwei Ebenen: (1) **Agent-Level** — `HookableAiProviderPort` (Decorator) ruft `before_agent_run`/`after_agent_run` Hooks auf; (2) **Tool-Level** — `OllamaAiAdapter` ruft `before_tool_call`/`after_tool_call` Hooks über `HookCallback`-Interface auf. Gateway-Lifecycle (`gateway_start`/`gateway_stop`) über `HookLifecycleListener` (Spring Events). Feature ist deaktiviert per Default (`jclaw.hooks.enabled=false`). Supported Stages: `gateway_start`, `gateway_stop`, `before_agent_run`, `after_agent_run`, `before_tool_call`, `after_tool_call`.
+
+> **Plugin-SDK-Stand (2026.6.34):** `before_agent_start`, Root-`openclaw/plugin-sdk`-Imports, `providerAuthEnvVars`/`channelEnvVars` werden nach dem 24.07.2026 entfernt. Die Node-Sidecar-Laufzeit (P4-01) muss gegen den **aktuellen** SDK-Stand bauen (Subpath-Imports, moderne Hook-Stages, `setup`-Deskriptoren); Details in `openclaw-compat.md` §3. Der Versionsstand der Referenz (2026.7.1 Stable / 2026.8.1-beta.2) ist in `openclaw-compat.md` §1.1 dokumentiert.
 
 > Die Plugin-Laufzeit-Entscheidung (Node-Sidecar vs. GraalJS vs. Java-Reimplementation) ist getroffen: **Node-Sidecar**, siehe [ADR-0001](adr/0001-node-sidecar-plugin-runtime.md). Das Bridge-Protokoll ist vollständig spezifiziert (siehe [bridge-protocol.md](bridge-protocol.md), P1-03).
 
@@ -152,6 +156,5 @@ Ein Baustein gilt als paritätisch, wenn:
 
 ## Nächste Schritte
 
-1. **P1-11** Hooks (`HOOK.md`-Scripts + Lifecycle-Events).
-2. **P1-10** Compaction — Kontext-Kompression bei Session-Grenzen.
-3. **P1-12** Cron-Jobs — Wiederkehrende Agent-Jobs.
+1. **P1-10** Compaction — Kontext-Kompression bei Session-Grenzen.
+2. **P1-12** Cron-Jobs — Wiederkehrende Agent-Jobs.

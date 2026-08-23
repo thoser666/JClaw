@@ -2,9 +2,11 @@ package biz.brumm.infrastructure.adapter.out.ai;
 
 import biz.brumm.domain.model.AgentCommand;
 import biz.brumm.domain.model.AgentResponse;
+import biz.brumm.domain.model.HookResult;
 import biz.brumm.domain.model.ToolInvocation;
 import biz.brumm.domain.port.out.AgentTool;
 import biz.brumm.domain.port.out.AiProviderPort;
+import biz.brumm.domain.port.out.HookCallback;
 import biz.brumm.domain.port.out.ToolPolicy;
 import biz.brumm.domain.service.AgentLoopLimitExceededException;
 import biz.brumm.infrastructure.mcp.McpToolRegistry;
@@ -41,13 +43,15 @@ public class OllamaAiAdapter implements AiProviderPort {
     private final ToolCallingManager toolCallingManager;
     private final ChatMemory chatMemory;
     private final List<ToolCallback> toolCallbacks;
+    private final HookCallback hookCallback;
 
     public OllamaAiAdapter(ChatModel chatModel, ToolCallingManager toolCallingManager, List<AgentTool> tools,
                            ObjectProvider<McpToolRegistry> mcpToolRegistry, ChatMemory chatMemory,
-                           ToolPolicy toolPolicy) {
+                           ToolPolicy toolPolicy, ObjectProvider<HookCallback> hookCallbackProvider) {
         this.chatModel = chatModel;
         this.toolCallingManager = toolCallingManager;
         this.chatMemory = chatMemory;
+        this.hookCallback = hookCallbackProvider.getIfAvailable();
         List<ToolCallback> callbacks = new ArrayList<>(List.of(ToolCallbacks.from(tools.toArray())));
         McpToolRegistry registry = mcpToolRegistry.getIfAvailable();
         if (registry != null) {
@@ -104,8 +108,35 @@ public class OllamaAiAdapter implements AiProviderPort {
                 return new AgentResponse(assistantMessage.getText(), Instant.now(), toolInvocations, iterations + 1, null);
             }
 
+            // before_tool_call Hooks für jeden Tool-Aufruf
+            if (hookCallback != null) {
+                boolean blocked = false;
+                for (AssistantMessage.ToolCall toolCall : assistantMessage.getToolCalls()) {
+                    HookResult hookResult = hookCallback.beforeToolCall(toolCall.name(), toolCall.arguments());
+                    if (!hookResult.allowed()) {
+                        log.info("Tool-Aufruf '{}' blockiert durch Hook '{}': {}", toolCall.name(),
+                                hookResult.hookName(), hookResult.output());
+                        blocked = true;
+                        break;
+                    }
+                }
+                if (blocked) {
+                    return new AgentResponse("Tool-Aufruf blockiert durch Hook.",
+                            Instant.now(), toolInvocations, iterations + 1, null);
+                }
+            }
+
             ToolExecutionResult toolExecutionResult = toolCallingManager.executeToolCalls(prompt, response);
             recordToolInvocations(assistantMessage, toolExecutionResult, toolInvocations);
+
+            // after_tool_call Hooks
+            if (hookCallback != null) {
+                for (AssistantMessage.ToolCall toolCall : assistantMessage.getToolCalls()) {
+                    String result = findToolResult(toolExecutionResult, toolCall.id());
+                    hookCallback.afterToolCall(toolCall.name(), result);
+                }
+            }
+
             prompt = new Prompt(toolExecutionResult.conversationHistory(), options);
         }
 
