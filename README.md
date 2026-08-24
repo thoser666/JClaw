@@ -114,6 +114,9 @@ Die JSON5-Datei wird beim Start automatisch geladen und überschreibt Werte aus 
 | `jclaw.hooks.enabled` | `false` | Lifecycle-Hooks via `HOOK.md`-Scripts (Deny-by-Default) |
 | `jclaw.hooks.dir` | `./hooks` | Verzeichnis mit Hook-Ordnern (`HOOK.md`) |
 | `jclaw.hooks.script-timeout` | `30` | Timeout für Script-Ausführungen in Sekunden |
+| `jclaw.compaction.enabled` | `false` | LLM-basierte Kontext-Kompression (Deny-by-Default) |
+| `jclaw.compaction.threshold` | `20` | Mindestanzahl Nachrichten vor Compaction |
+| `jclaw.compaction.retain-count` | `4` | Jüngste Nachrichten, die nie komprimiert werden |
 | `jclaw.auth.enabled` | `false` | API-Token-Authentifizierung für alle `/api/**`-Endpunkte |
 | `jclaw.auth.public-paths` | `-` (leer) | Öffentliche Pfade ohne Auth (z. B. `/api/v1/gateway/status`) |
 
@@ -502,6 +505,15 @@ Lifecycle-Hooks via `HOOK.md`-Scripts:
 * **Script-Ausführung:** `ProcessBuilder` mit `JCLAW_HOOK_*`-Umgebungsvariablen; Exit-Code 0 = proceed, alles andere = block
 * **Priorität:** Hooks werden absteigend nach `priority` ausgeführt (höher = früher)
 * **Timeout:** `jclaw.hooks.script-timeout` (Standard: 30s)
+
+### Compaction (P1-10)
+
+LLM-basierte Kontext-Kompression für lange Konversationen:
+
+* **Aktivieren:** `jclaw.compaction.enabled=true` in `application.properties` oder `openclaw.json`
+* **Schwellenwert:** `jclaw.compaction.threshold` (Standard: 20 Nachrichten) — Compaction wird ausgelöst, wenn überschritten
+* **Retain:** `jclaw.compaction.retain-count` (Standard: 4) — Jüngste Nachrichten werden nie komprimiert
+* **Funktionsweise:** Ältere Nachrichten werden durch eine LLM-Zusammenfassung ersetzt, aktuelle Nachrichten bleiben erhalten
 
 ## Tests
 

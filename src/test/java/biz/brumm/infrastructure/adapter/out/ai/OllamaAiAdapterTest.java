@@ -72,7 +72,10 @@ class OllamaAiAdapterTest {
         @SuppressWarnings("unchecked")
         ObjectProvider<biz.brumm.domain.port.out.HookCallback> hookProvider = mock(ObjectProvider.class);
         when(hookProvider.getIfAvailable()).thenReturn(null);
-        return new OllamaAiAdapter(chatModel, toolCallingManager, tools, mcpToolRegistryProvider, memory, policy, hookProvider);
+        @SuppressWarnings("unchecked")
+        ObjectProvider<biz.brumm.domain.service.CompactionService> compactionProvider = mock(ObjectProvider.class);
+        when(compactionProvider.getIfAvailable()).thenReturn(null);
+        return new OllamaAiAdapter(chatModel, toolCallingManager, tools, mcpToolRegistryProvider, memory, policy, hookProvider, compactionProvider);
     }
 
     private MessageWindowChatMemory newMemory() {

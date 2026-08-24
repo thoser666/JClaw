@@ -2,6 +2,7 @@ package biz.brumm.infrastructure.adapter.out.ai;
 
 import biz.brumm.domain.model.AgentCommand;
 import biz.brumm.domain.model.AgentResponse;
+import biz.brumm.domain.model.CompactionResult;
 import biz.brumm.domain.model.HookResult;
 import biz.brumm.domain.model.ToolInvocation;
 import biz.brumm.domain.port.out.AgentTool;
@@ -9,6 +10,7 @@ import biz.brumm.domain.port.out.AiProviderPort;
 import biz.brumm.domain.port.out.HookCallback;
 import biz.brumm.domain.port.out.ToolPolicy;
 import biz.brumm.domain.service.AgentLoopLimitExceededException;
+import biz.brumm.domain.service.CompactionService;
 import biz.brumm.infrastructure.mcp.McpToolRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -44,14 +46,17 @@ public class OllamaAiAdapter implements AiProviderPort {
     private final ChatMemory chatMemory;
     private final List<ToolCallback> toolCallbacks;
     private final HookCallback hookCallback;
+    private final CompactionService compactionService;
 
     public OllamaAiAdapter(ChatModel chatModel, ToolCallingManager toolCallingManager, List<AgentTool> tools,
                            ObjectProvider<McpToolRegistry> mcpToolRegistry, ChatMemory chatMemory,
-                           ToolPolicy toolPolicy, ObjectProvider<HookCallback> hookCallbackProvider) {
+                           ToolPolicy toolPolicy, ObjectProvider<HookCallback> hookCallbackProvider,
+                           ObjectProvider<CompactionService> compactionServiceProvider) {
         this.chatModel = chatModel;
         this.toolCallingManager = toolCallingManager;
         this.chatMemory = chatMemory;
         this.hookCallback = hookCallbackProvider.getIfAvailable();
+        this.compactionService = compactionServiceProvider.getIfAvailable();
         List<ToolCallback> callbacks = new ArrayList<>(List.of(ToolCallbacks.from(tools.toArray())));
         McpToolRegistry registry = mcpToolRegistry.getIfAvailable();
         if (registry != null) {
@@ -81,7 +86,18 @@ public class OllamaAiAdapter implements AiProviderPort {
         List<Message> messages = new ArrayList<>();
         messages.add(new SystemMessage(systemPrompt));
         if (hasContext) {
-            messages.addAll(chatMemory.get(command.contextId()));
+            List<Message> history = chatMemory.get(command.contextId());
+            // Compaction: Ältere Nachrichten durch Zusammenfassung ersetzen
+            if (compactionService != null && compactionService.isCompactionNeeded(history)) {
+                CompactionResult result = compactionService.compact(history);
+                log.info("Compaction angewendet: {} entfernt, {} behalten.",
+                        result.messagesRemoved(), result.messagesRetained());
+                // Compacted Messages sind bereits als Text — als UserMessage rekonstruieren
+                history = result.compactedMessages().stream()
+                        .map(text -> (Message) new UserMessage(text))
+                        .toList();
+            }
+            messages.addAll(history);
         }
         messages.add(new UserMessage(command.prompt()));
 
