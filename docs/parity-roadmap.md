@@ -1,6 +1,6 @@
 # JClaw → OpenClaw-Parität: Roadmap
 
-Stand: 2026-08-24 · Basis: `docs/openclaw-compat.md` (Formatanalyse) · Referenz-Version: OpenClaw **2026.7.1** (Stable) / **2026.8.1-beta.2** (Betainhalt) · Ziel: **100 % Parität** zu OpenClaw.
+Stand: 2026-08-25 · Basis: `docs/openclaw-compat.md` (Formatanalyse) · Referenz-Version: OpenClaw **2026.7.1** (Stable) / **2026.8.1-beta.2** (Betainhalt) · Ziel: **100 % Parität** zu OpenClaw.
 
 ## Status-Legende
 
@@ -36,9 +36,9 @@ Hexagonale Basis, damit alle weiteren Bausteine aufsetzen können.
 
 ---
 
-## Phase 1 — Kern-Parität (abgeschlossen)
+## Phase 1 — Kern-Parität (abgeschlossen ✅)
 
-Agent-Kern-Fähigkeiten, die OpenClaw zusätzlich bietet und die ohne JS möglich sind. Nur P1-12 (Cron-Jobs) steht noch aus.
+Agent-Kern-Fähigkeiten, die OpenClaw zusätzlich bietet und die ohne JS möglich sind. Alle Bausteine (P1-01 bis P1-12) sind implementiert.
 
 | ID | Baustein | Beschreibung | Priorität | Status |
 |---|---|---|---|---|
@@ -53,7 +53,7 @@ Agent-Kern-Fähigkeiten, die OpenClaw zusätzlich bietet und die ohne JS möglic
 | P1-09 | Session-Konzept | Von `contextId` auf Sessions erweitern (Reset-Strategien `daily`/`idle`, generierte Titel, REST-API); Session-first-UI seit 2026.7.1 als Referenz. Scope-Abgrenzung: Thread-Bindings, dmScope, Session-Gruppen, Transcript-Export und Kontext-Verbrauch sind P2-04 (Gateway) | 🟡 | ✅ |
 | P1-10 | Compaction | Kontext-Kompression bei Session-Grenzen | 🟢 | ✅ |
 | P1-11 | Hooks | `HOOK.md`-Scripts + Lifecycle-Events (before_tool_call, before_agent_run, …) via Script-Runner; Hook-Stage-Migration beachten (`before_agent_start`/SDK-Root-Imports seit 2026.6.34 entfernt) | 🟡 | ✅ |
-| P1-12 | Cron-Jobs | Wiederkehrende Agent-Jobs (`cron.*`-Konfiguration) | 🟢 | ⬜ |
+| P1-12 | Cron-Jobs | Wiederkehrende Agent-Jobs (`cron.*`-Konfiguration) | 🟢 | ✅ |
 
 ---
 
@@ -142,6 +142,8 @@ Anmerkungen:
 
 > **Compaction (P1-10) getroffen:** LLM-basierte Kontext-Kompression: Wenn die Nachrichtenanzahl `jclaw.compaction.threshold` (Standard: 20) überschreitet, werden ältere Nachrichten durch eine vom LLM erzeugte Zusammenfassung ersetzt. Die jüngsten `jclaw.compaction.retainCount` (Standard: 4) Nachrichten werden nie komprimiert. `LlmCompactionService` nutzt das konfigurierte ChatModel für die Zusammenfassung. Integration in `OllamaAiAdapter`: Vor jedem Agentenlauf wird geprüft, ob Compaction nötig ist — wenn ja, wird die Nachrichtenliste komprimiert, bevor der Prompt gebaut wird. Feature ist deaktiviert per Default (`jclaw.compaction.enabled=false`). Compaction ist optional (`ObjectProvider<CompactionService>`), sodass bestehende Tests unverändert bleiben.
 
+> **Cron-Jobs (P1-12) getroffen:** Wiederkehrende Agent-Jobs über `jclaw.cron.*`-Konfiguration. `CronJob`-Record mit id, name, cronExpression (5-Feld-Format), prompt, contextId, enabled, lastRunAt, nextRunAt. `CronExpression`-Parser unterstützt `*`, Zahlen, Ranges (`1-5`), Steps (`*/5`, `1-10/2`), Listen (`1,3,5`) mit `nextExecutionAfter()`-Berechnung. `CronJobStore`-Port mit H2-Implementierung (`cron_job`-Tabelle). `CronSchedulerService` prüft periodisch auf fällige Jobs, führt Prompt über Listener aus, speichert lastRunAt/nextRunAt. REST-API: `GET|POST|PUT|DELETE /api/v1/cron-jobs`, `POST /api/v1/cron-jobs/{id}/execute` (manueller Trigger). Feature ist deaktiviert per Default (`jclaw.cron.enabled=false`). `@ConfigurationPropertiesScan` bindet `CronProperties` automatisch ein.
+
 > **Plugin-SDK-Stand (2026.6.34):** `before_agent_start`, Root-`openclaw/plugin-sdk`-Imports, `providerAuthEnvVars`/`channelEnvVars` werden nach dem 24.07.2026 entfernt. Die Node-Sidecar-Laufzeit (P4-01) muss gegen den **aktuellen** SDK-Stand bauen (Subpath-Imports, moderne Hook-Stages, `setup`-Deskriptoren); Details in `openclaw-compat.md` §3. Der Versionsstand der Referenz (2026.7.1 Stable / 2026.8.1-beta.2) ist in `openclaw-compat.md` §1.1 dokumentiert.
 
 > Die Plugin-Laufzeit-Entscheidung (Node-Sidecar vs. GraalJS vs. Java-Reimplementation) ist getroffen: **Node-Sidecar**, siehe [ADR-0001](adr/0001-node-sidecar-plugin-runtime.md). Das Bridge-Protokoll ist vollständig spezifiziert (siehe [bridge-protocol.md](bridge-protocol.md), P1-03).
@@ -158,4 +160,4 @@ Ein Baustein gilt als paritätisch, wenn:
 
 ## Nächste Schritte
 
-1. **P1-12** Cron-Jobs — Wiederkehrende Agent-Jobs.
+1. **P3-01** Channel-API — Abstraktion für Nachrichten von/nach externen Plattformen.

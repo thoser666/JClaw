@@ -24,3 +24,15 @@ CREATE TABLE IF NOT EXISTS api_key (
 );
 
 CREATE INDEX IF NOT EXISTS idx_api_key_token_hash ON api_key(token_hash);
+
+CREATE TABLE IF NOT EXISTS cron_job (
+    id VARCHAR(255) PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    cron_expression VARCHAR(255) NOT NULL,
+    prompt CLOB NOT NULL,
+    context_id VARCHAR(255),
+    enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    last_run_at TIMESTAMP,
+    next_run_at TIMESTAMP,
+    created_at TIMESTAMP NOT NULL
+);

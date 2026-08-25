@@ -267,6 +267,6 @@ Datei-/Shell-Zugriff (`exec`, `read`/`write`/`glob`/`grep`, `apply_patch`), Web 
 
 ## 9. Nächste Schritte
 
-> Der Fortschritt wird in der [Paritäts-Roadmap](parity-roadmap.md) verfolgt. Stand: P0 (Fundament), **P1-01–P1-11** (Agent-Kern, komplett außer P1-12 Cron), **P2-01–P2-06, P2-09** (Konfiguration & Gateway, komplett). **Phase 1 ist komplett (außer P1-12); Phase 2 ist komplett.**
+> Der Fortschritt wird in der [Paritäts-Roadmap](parity-roadmap.md) verfolgt. Stand: P0 (Fundament), **P1-01–P1-12** (Agent-Kern, komplett), **P2-01–P2-06, P2-09** (Konfiguration & Gateway, komplett). **Phase 1 ist komplett; Phase 2 ist komplett.**
 
-1. Danach: Cron-Jobs (P1-12) gemäß Roadmap.
+1. Danach: Channel-API (P3-01) gemäß Roadmap.

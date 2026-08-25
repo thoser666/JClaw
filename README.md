@@ -117,6 +117,9 @@ Die JSON5-Datei wird beim Start automatisch geladen und überschreibt Werte aus 
 | `jclaw.compaction.enabled` | `false` | LLM-basierte Kontext-Kompression (Deny-by-Default) |
 | `jclaw.compaction.threshold` | `20` | Mindestanzahl Nachrichten vor Compaction |
 | `jclaw.compaction.retain-count` | `4` | Jüngste Nachrichten, die nie komprimiert werden |
+| `jclaw.cron.enabled` | `false` | Cron-Job-System aktivieren (Deny-by-Default) |
+| `jclaw.cron.interval` | `60` | Intervall in Sekunden für Job-Prüfung |
+| `jclaw.cron.max-retries` | `3` | Maximale Wiederholungen bei Fehler |
 | `jclaw.auth.enabled` | `false` | API-Token-Authentifizierung für alle `/api/**`-Endpunkte |
 | `jclaw.auth.public-paths` | `-` (leer) | Öffentliche Pfade ohne Auth (z. B. `/api/v1/gateway/status`) |
 
@@ -485,6 +488,12 @@ Zusätzlich zur Agent-API stehen Gateway-Endpoints zur Verfügung:
 | `/api/v1/auth/tokens` | GET | Alle API-Token auflisten (ohne Token-Werte) |
 | `/api/v1/auth/tokens` | POST | Neuen API-Token erstellen (`{"name": "..."}`) |
 | `/api/v1/auth/tokens/{id}` | DELETE | API-Token löschen |
+| `/api/v1/cron-jobs` | GET | Alle Cron-Jobs auflisten |
+| `/api/v1/cron-jobs` | POST | Neuen Cron-Job erstellen (`{"name": "...", "cronExpression": "0 */6 * * *", "prompt": "..."}`) |
+| `/api/v1/cron-jobs/{id}` | GET | Einzelnen Cron-Job abfragen |
+| `/api/v1/cron-jobs/{id}` | PUT | Cron-Job aktualisieren |
+| `/api/v1/cron-jobs/{id}` | DELETE | Cron-Job löschen |
+| `/api/v1/cron-jobs/{id}/execute` | POST | Cron-Job manuell ausführen |
 
 ### Auth (P2-06)
 
@@ -514,6 +523,15 @@ LLM-basierte Kontext-Kompression für lange Konversationen:
 * **Schwellenwert:** `jclaw.compaction.threshold` (Standard: 20 Nachrichten) — Compaction wird ausgelöst, wenn überschritten
 * **Retain:** `jclaw.compaction.retain-count` (Standard: 4) — Jüngste Nachrichten werden nie komprimiert
 * **Funktionsweise:** Ältere Nachrichten werden durch eine LLM-Zusammenfassung ersetzt, aktuelle Nachrichten bleiben erhalten
+
+### Cron-Jobs (P1-12)
+
+Wiederkehrende Agent-Jobs mit Cron-Ausdrücken:
+
+* **Aktivieren:** `jclaw.cron.enabled=true` in `application.properties` oder `openclaw.json`
+* **Intervall:** `jclaw.cron.interval` (Standard: 60s) — Wie oft auf fällige Jobs geprüft wird
+* **Cron-Syntax:** 5 Felder — `Minute Stunde Tag Monat Wochentag` (z.B. `0 */6 * * *` = alle 6 Stunden)
+* **REST-API:** `GET|POST|PUT|DELETE /api/v1/cron-jobs`, `POST /api/v1/cron-jobs/{id}/execute`
 
 ## Tests
 
