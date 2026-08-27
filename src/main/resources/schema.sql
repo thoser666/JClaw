@@ -36,3 +36,41 @@ CREATE TABLE IF NOT EXISTS cron_job (
     next_run_at TIMESTAMP,
     created_at TIMESTAMP NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS channel (
+    id VARCHAR(255) PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    type VARCHAR(50) NOT NULL,
+    enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    config_json CLOB,
+    created_at TIMESTAMP NOT NULL,
+    updated_at TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS channel_binding (
+    id VARCHAR(255) PRIMARY KEY,
+    channel_id VARCHAR(255) NOT NULL,
+    external_id VARCHAR(255) NOT NULL,
+    session_id VARCHAR(255) NOT NULL,
+    binding_type VARCHAR(50) NOT NULL,
+    created_at TIMESTAMP NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_channel_binding_channel ON channel_binding(channel_id);
+CREATE INDEX IF NOT EXISTS idx_channel_binding_external ON channel_binding(channel_id, external_id);
+
+CREATE TABLE IF NOT EXISTS channel_message (
+    id VARCHAR(255) PRIMARY KEY,
+    channel_id VARCHAR(255) NOT NULL,
+    external_id VARCHAR(255),
+    direction VARCHAR(50) NOT NULL,
+    content CLOB,
+    sender_id VARCHAR(255),
+    sender_name VARCHAR(255),
+    thread_id VARCHAR(255),
+    session_id VARCHAR(255),
+    timestamp TIMESTAMP NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_channel_message_session ON channel_message(session_id);
+CREATE INDEX IF NOT EXISTS idx_channel_message_channel ON channel_message(channel_id);
