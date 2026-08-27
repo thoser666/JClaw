@@ -120,6 +120,8 @@ Die JSON5-Datei wird beim Start automatisch geladen und überschreibt Werte aus 
 | `jclaw.cron.enabled` | `false` | Cron-Job-System aktivieren (Deny-by-Default) |
 | `jclaw.cron.interval` | `60` | Intervall in Sekunden für Job-Prüfung |
 | `jclaw.cron.max-retries` | `3` | Maximale Wiederholungen bei Fehler |
+| `jclaw.channels.enabled` | `false` | Channel-System aktivieren (Deny-by-Default) |
+| `jclaw.channels.default-timeout` | `30` | Standard-Timeout für Channel-Adapter in Sekunden |
 | `jclaw.auth.enabled` | `false` | API-Token-Authentifizierung für alle `/api/**`-Endpunkte |
 | `jclaw.auth.public-paths` | `-` (leer) | Öffentliche Pfade ohne Auth (z. B. `/api/v1/gateway/status`) |
 
@@ -302,7 +304,7 @@ jclaw.agent.webtool.max-search-results=5
 
 Das Konversations-Memory wird über Spring JDBC in einer eingebetteten **H2-Datenbank** gespeichert:
 
-* Das Tabellenschema ist in `src/main/resources/schema.sql` definiert (Tabellen `chat_message` und `session`).
+* Das Tabellenschema ist in `src/main/resources/schema.sql` definiert (Tabellen `chat_message`, `session`, `channel`, `channel_binding`, `channel_message`).
 * Die Datenbankdatei wird beim ersten Start automatisch unter `./data/jclaw.mv.db` angelegt (Ordner `data/` ist in `.gitignore` ausgenommen).
 * `JdbcChatMemoryRepository` serialisiert alle Spring-AI-Message-Typen (System, User, Assistant inkl. Tool-Calls, Tool-Response) als JSON in die Spalte `message_json`.
 * Ein Neustart der Anwendung stellt den Gesprächsverlauf einer `contextId` automatisch wieder her.
@@ -494,6 +496,17 @@ Zusätzlich zur Agent-API stehen Gateway-Endpoints zur Verfügung:
 | `/api/v1/cron-jobs/{id}` | PUT | Cron-Job aktualisieren |
 | `/api/v1/cron-jobs/{id}` | DELETE | Cron-Job löschen |
 | `/api/v1/cron-jobs/{id}/execute` | POST | Cron-Job manuell ausführen |
+| `/api/v1/channels` | GET | Alle Channels auflisten |
+| `/api/v1/channels` | POST | Neuen Channel erstellen |
+| `/api/v1/channels/{id}` | GET | Einzelnen Channel abfragen |
+| `/api/v1/channels/{id}` | PUT | Channel aktualisieren |
+| `/api/v1/channels/{id}` | DELETE | Channel löschen |
+| `/api/v1/channels/{id}/send` | POST | Nachricht über Channel senden |
+| `/api/v1/channels/{id}/inbound` | POST | Eingehende Nachricht verarbeiten |
+| `/api/v1/channels/{id}/bindings` | GET | Bindungen eines Channels auflisten |
+| `/api/v1/channels/{id}/bindings` | POST | Neue Bindung erstellen |
+| `/api/v1/channels/{id}/bindings/{bindingId}` | DELETE | Bindung löschen |
+| `/api/v1/channels/adapters` | GET | Verfügbare Channel-Adapter auflisten |
 
 ### Auth (P2-06)
 
@@ -532,6 +545,16 @@ Wiederkehrende Agent-Jobs mit Cron-Ausdrücken:
 * **Intervall:** `jclaw.cron.interval` (Standard: 60s) — Wie oft auf fällige Jobs geprüft wird
 * **Cron-Syntax:** 5 Felder — `Minute Stunde Tag Monat Wochentag` (z.B. `0 */6 * * *` = alle 6 Stunden)
 * **REST-API:** `GET|POST|PUT|DELETE /api/v1/cron-jobs`, `POST /api/v1/cron-jobs/{id}/execute`
+
+### Channels (P3-01)
+
+Abstraktionsschicht für externe Nachrichten-Plattformen (Telegram, Slack, Discord, etc.):
+
+* **Aktivieren:** `jclaw.channels.enabled=true` in `application.properties` oder `openclaw.json`
+* **Channel-Typen:** TELEGRAM, SLACK, DISCORD, WHATSAPP, SIGNAL, X, EMAIL, IRC, MATTERMOST, FEISHU, GOOGLE_CHAT, SONSTIGE
+* **Session-Bindung:** Externe Thread/DM-IDs werden über `ChannelBinding` (DM oder Thread) einer JClaw-Session zugeordnet
+* **Adapter-Interface:** `ChannelAdapter`-Port — Channel-Adapter (P3-02–P3-04) implementieren `send()`, `isAvailable()`, `startReceiving()`/`stopReceiving()`
+* **REST-API:** CRUD für Channels, Senden, Inbound-Verarbeitung, Bindungsverwaltung, Adapter-Liste
 
 ## Tests
 

@@ -267,6 +267,7 @@ Datei-/Shell-Zugriff (`exec`, `read`/`write`/`glob`/`grep`, `apply_patch`), Web 
 
 ## 9. Nächste Schritte
 
-> Der Fortschritt wird in der [Paritäts-Roadmap](parity-roadmap.md) verfolgt. Stand: P0 (Fundament), **P1-01–P1-12** (Agent-Kern, komplett), **P2-01–P2-06, P2-09** (Konfiguration & Gateway, komplett). **Phase 1 ist komplett; Phase 2 ist komplett.**
+> Der Fortschritt wird in der [Paritäts-Roadmap](parity-roadmap.md) verfolgt. Stand: P0 (Fundament), **P1-01–P1-12** (Agent-Kern, komplett), **P2-01–P2-06, P2-09** (Konfiguration & Gateway, komplett), **P3-01** (Channel-API, komplett). **Phase 1 ist komplett; Phase 2 ist komplett; Phase 3 begonnen.**
 
-1. Danach: Channel-API (P3-01) gemäß Roadmap.
+1. ✅ P3-01 Channel-API — Abstraktion (send/receive) + Session-Bindung. Implementiert mit `ChannelAdapter`-Port, `ChannelStore`-Port (H2), `ChannelService`, `ChannelRestController`, `ChannelProperties`. Features: CRUD für Channels, Senden via Adapter, Inbound-Verarbeitung, DM-/Thread-Bindung, Adapter-Liste. REST-API: `/api/v1/channels`. 496 Tests.
+2. Nächste: P3-02 Telegram, P3-03 Slack, P3-04 Discord — Channel-Adapter (konkrete Plattform-Implementierungen).
