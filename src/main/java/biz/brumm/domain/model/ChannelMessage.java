@@ -62,4 +62,9 @@ public record ChannelMessage(String id, String channelId, String externalId,
                 channelId, null, MessageDirection.OUTBOUND,
                 content, null, null, threadId, sessionId, Instant.now());
     }
+
+    public ChannelMessage withExternalId(String externalId) {
+        return new ChannelMessage(id, channelId, externalId, direction,
+                content, senderId, senderName, threadId, sessionId, timestamp);
+    }
 }

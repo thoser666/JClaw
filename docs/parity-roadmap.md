@@ -78,7 +78,7 @@ OpenClaw-Kernfeature: Nachrichten von/nach externen Plattformen.
 | ID | Baustein | Beschreibung | Priorität | Status |
 |---|---|---|---|---|
 | P3-01 | Channel-API | Abstraktion (send/receive) + Session-Bindung (DM-/Thread-Bindung) | 🔴 | ✅ |
-| P3-02 | Telegram | Channel-Adapter (Polling/Webhook) | 🟡 | ⬜ |
+| P3-02 | Telegram | Channel-Adapter (Polling/Webhook) | 🟡 | ✅ |
 | P3-03 | Slack | Channel-Adapter (Socket Mode) | 🟡 | ⬜ |
 | P3-04 | Discord | Channel-Adapter (WebSocket) | 🟡 | ⬜ |
 | P3-05 | WhatsApp | Channel-Adapter | 🟡 | ⬜ |
@@ -146,6 +146,8 @@ Anmerkungen:
 
 > **Channel-API (P3-01) getroffen:** Abstraktionsschicht für externe Nachrichten-Plattformen. `ChannelAdapter`-Port definiert `send()`, `isAvailable()`, `startReceiving()`/`stopReceiving()`. `ChannelStore`-Port verwaltet Channels, Bindungen und Nachrichten (H2-Implementierung mit `channel`, `channel_binding`, `channel_message`-Tabellen). `ChannelService` orchestriert CRUD, Senden via Adapter, Inbound-Verarbeitung und Bindungsverwaltung. Session-Bindung über `ChannelBinding` (DM oder Thread) mit External-ID-zu-Session-ID-Mapping. REST-API: `GET|POST|PUT|DELETE /api/v1/channels`, `POST /api/v1/channels/{id}/send`, `POST /api/v1/channels/{id}/inbound`, `GET|POST|DELETE /api/v1/channels/{id}/bindings`, `GET /api/v1/channels/adapters`. Feature ist deaktiviert per Default (`jclaw.channels.enabled=false`). Channel-Adapter (Telegram, Slack, Discord) sind eigenständige Bausteine (P3-02–P3-04).
 
+> **Telegram-Adapter (P3-02) getroffen:** `TelegramChannelAdapter` implementiert den `ChannelAdapter`-Port für die Telegram Bot API über Long-Polling (`getUpdates`) und `sendMessage`. Konfiguration im `Channel.config`: `token` (Bot-Token, Pflicht), `pollTimeoutSeconds` (Lang-Polling-Timeout, Standard 30), `baseUrl` (Standard `https://api.telegram.org`). Senden: `POST /bot{token}/sendMessage` mit `chatId` aus `threadId`/`senderId`, erfasst die externe `message_id`. Empfang: `startReceiving` startet einen Daemon-Thread mit Long-Polling; eingehende Nachrichten werden zu `ChannelMessage.inbound` konvertiert (content, senderId/senderName, threadId=chatId, externalId=message_id) und an den `InboundMessageHandler` delegiert; der Offset wird über `update_id` fortgeschrieben (keine Duplikate). HTTP via `java.net.http.HttpClient` + Jackson 3 `ObjectMapper` (injektierbar für Tests). Adapter ist als `@Component` mit `@ConditionalOnProperty(jclaw.channels.enabled=true)` registriert. 9 Tests (Verfügbarkeit, senden, Fehlerfälle, Long-Polling, Empfang).
+
 > **Plugin-SDK-Stand (2026.6.34):** `before_agent_start`, Root-`openclaw/plugin-sdk`-Imports, `providerAuthEnvVars`/`channelEnvVars` werden nach dem 24.07.2026 entfernt. Die Node-Sidecar-Laufzeit (P4-01) muss gegen den **aktuellen** SDK-Stand bauen (Subpath-Imports, moderne Hook-Stages, `setup`-Deskriptoren); Details in `openclaw-compat.md` §3. Der Versionsstand der Referenz (2026.7.1 Stable / 2026.8.1-beta.2) ist in `openclaw-compat.md` §1.1 dokumentiert.
 
 > Die Plugin-Laufzeit-Entscheidung (Node-Sidecar vs. GraalJS vs. Java-Reimplementation) ist getroffen: **Node-Sidecar**, siehe [ADR-0001](adr/0001-node-sidecar-plugin-runtime.md). Das Bridge-Protokoll ist vollständig spezifiziert (siehe [bridge-protocol.md](bridge-protocol.md), P1-03).
@@ -162,6 +164,5 @@ Ein Baustein gilt als paritätisch, wenn:
 
 ## Nächste Schritte
 
-1. **P3-02** Telegram — Channel-Adapter (Polling/Webhook) für Telegram.
-2. **P3-03** Slack — Channel-Adapter (Socket Mode) für Slack.
-3. **P3-04** Discord — Channel-Adapter (WebSocket) für Discord.
+1. **P3-03** Slack — Channel-Adapter (Socket Mode) für Slack.
+2. **P3-04** Discord — Channel-Adapter (WebSocket) für Discord.

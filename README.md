@@ -553,8 +553,28 @@ Abstraktionsschicht für externe Nachrichten-Plattformen (Telegram, Slack, Disco
 * **Aktivieren:** `jclaw.channels.enabled=true` in `application.properties` oder `openclaw.json`
 * **Channel-Typen:** TELEGRAM, SLACK, DISCORD, WHATSAPP, SIGNAL, X, EMAIL, IRC, MATTERMOST, FEISHU, GOOGLE_CHAT, SONSTIGE
 * **Session-Bindung:** Externe Thread/DM-IDs werden über `ChannelBinding` (DM oder Thread) einer JClaw-Session zugeordnet
-* **Adapter-Interface:** `ChannelAdapter`-Port — Channel-Adapter (P3-02–P3-04) implementieren `send()`, `isAvailable()`, `startReceiving()`/`stopReceiving()`
+* **Adapter-Interface:** `ChannelAdapter`-Port — Channel-Adapter implementieren `send()`, `isAvailable()`, `startReceiving()`/`stopReceiving()`
 * **REST-API:** CRUD für Channels, Senden, Inbound-Verarbeitung, Bindungsverwaltung, Adapter-Liste
+
+#### Telegram (P3-02)
+
+Der `TelegramChannelAdapter` verbindet JClaw mit der Telegram Bot API über **Long-Polling**:
+
+* **Aktivieren:** Channel mit `type: TELEGRAM` und folgender Konfiguration erstellen:
+  ```json5
+  {
+    "name": "Mein Telegram Bot",
+    "type": "TELEGRAM",
+    "config": {
+      "token": "<BOT_TOKEN>",          // Pflicht – von @BotFather
+      "pollTimeoutSeconds": 30,        // optional, Long-Polling-Timeout
+      "baseUrl": "https://api.telegram.org"  // optional, API-Basis-URL
+    }
+  }
+  ```
+* **Senden:** `POST /api/v1/channels/{id}/send` — `chatId` wird aus `threadId` bzw. `senderId` aufgelöst
+* **Empfangen:** `startReceiving` (Long-Polling `getUpdates` in einem Daemon-Thread) — eingehende Nachrichten werden an den `InboundMessageHandler` delegiert; der Offset wird per `update_id` fortgeschrieben (keine Duplikate)
+* **Verfügbarkeit:** `isAvailable()` liefert `true`, wenn der Channel aktiv ist und ein `token` gesetzt ist
 
 ## Tests
 
