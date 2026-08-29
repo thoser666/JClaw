@@ -576,6 +576,26 @@ Der `TelegramChannelAdapter` verbindet JClaw mit der Telegram Bot API über **Lo
 * **Empfangen:** `startReceiving` (Long-Polling `getUpdates` in einem Daemon-Thread) — eingehende Nachrichten werden an den `InboundMessageHandler` delegiert; der Offset wird per `update_id` fortgeschrieben (keine Duplikate)
 * **Verfügbarkeit:** `isAvailable()` liefert `true`, wenn der Channel aktiv ist und ein `token` gesetzt ist
 
+#### Slack (P3-03)
+
+Der `SlackChannelAdapter` verbindet JClaw mit Slack über **Socket Mode** (WebSocket) und die REST-API:
+
+* **Aktivieren:** Channel mit `type: SLACK` und folgender Konfiguration erstellen:
+  ```json5
+  {
+    "name": "Mein Slack App",
+    "type": "SLACK",
+    "config": {
+      "token": "<BOT_TOKEN>",          // Pflicht – z. B. xoxb-…
+      "baseUrl": "https://slack.com/api"  // optional, Slack-API-Basis-URL
+    }
+  }
+  ```
+  Voraussetzung: die Slack-App muss **Socket Mode** aktiviert haben (Events-API mit Socket Mode, keine Request-URL nötig; Bot-Scope für `chat:write` und die gewünschten Events).
+* **Senden:** `POST /api/v1/channels/{id}/send` — `chat.postMessage` mit `Authorization: Bearer <token>`; `channel` wird aus `threadId` bzw. `senderId` aufgelöst, die externe `ts` wird erfasst
+* **Empfangen:** `startReceiving` öffnet via `apps.connections.open` eine Socket-Mode-WebSocket-URL und verbindet sich mit dem eingebauten Jakarta-WebSocket-Client; eingehende `events_api`-Envelopes werden per `envelope_id` bestätigt (Ack) und `event_callback`-Nachrichten an den `InboundMessageHandler` delegiert
+* **Verfügbarkeit:** `isAvailable()` liefert `true`, wenn der Channel aktiv ist und ein `token` gesetzt ist
+
 ## Tests
 
 ```bash

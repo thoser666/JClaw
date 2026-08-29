@@ -267,8 +267,9 @@ Datei-/Shell-Zugriff (`exec`, `read`/`write`/`glob`/`grep`, `apply_patch`), Web 
 
 ## 9. Nächste Schritte
 
-> Der Fortschritt wird in der [Paritäts-Roadmap](parity-roadmap.md) verfolgt. Stand: P0 (Fundament), **P1-01–P1-12** (Agent-Kern, komplett), **P2-01–P2-06, P2-09** (Konfiguration & Gateway, komplett), **P3-01** (Channel-API, komplett), **P3-02** (Telegram, komplett). **Phase 1 ist komplett; Phase 2 ist komplett; Phase 3 begonnen.**
+> Der Fortschritt wird in der [Paritäts-Roadmap](parity-roadmap.md) verfolgt. Stand: P0 (Fundament), **P1-01–P1-12** (Agent-Kern, komplett), **P2-01–P2-06, P2-09** (Konfiguration & Gateway, komplett), **P3-01** (Channel-API, komplett), **P3-02** (Telegram, komplett), **P3-03** (Slack Socket Mode, komplett). **Phase 1 ist komplett; Phase 2 ist komplett; Phase 3 begonnen.**
 
 1. ✅ P3-01 Channel-API — Abstraktion (send/receive) + Session-Bindung. Implementiert mit `ChannelAdapter`-Port, `ChannelStore`-Port (H2), `ChannelService`, `ChannelRestController`, `ChannelProperties`. REST-API: `/api/v1/channels`.
 2. ✅ P3-02 Telegram — `TelegramChannelAdapter` (Long-Polling `getUpdates` + `sendMessage`), Konfig `token`/`pollTimeoutSeconds`/`baseUrl`, Daemon-Thread-Empfang mit `update_id`-Offset. 505 Tests.
-3. Nächste: P3-03 Slack (Socket Mode), P3-04 Discord (WebSocket) — konkrete Channel-Adapter.
+3. ✅ P3-03 Slack — `SlackChannelAdapter` (Socket Mode via Jakarta-WebSocket-Client, `chat.postMessage` fürs Senden, `apps.connections.open` für die WS-URL, `envelope_id`-Ack beim Empfang), Konfig `token`/`baseUrl`. Zerlegbar/getestet über injizierbaren `WebSocketConnector`+`SessionHandle`. 10 Tests.
+4. Nächste: P3-04 Discord (WebSocket) — konkreter Channel-Adapter.
