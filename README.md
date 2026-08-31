@@ -596,6 +596,27 @@ Der `SlackChannelAdapter` verbindet JClaw mit Slack über **Socket Mode** (WebSo
 * **Empfangen:** `startReceiving` öffnet via `apps.connections.open` eine Socket-Mode-WebSocket-URL und verbindet sich mit dem eingebauten Jakarta-WebSocket-Client; eingehende `events_api`-Envelopes werden per `envelope_id` bestätigt (Ack) und `event_callback`-Nachrichten an den `InboundMessageHandler` delegiert
 * **Verfügbarkeit:** `isAvailable()` liefert `true`, wenn der Channel aktiv ist und ein `token` gesetzt ist
 
+#### Discord (P3-04)
+
+Der `DiscordChannelAdapter` verbindet JClaw mit Discord über den **Gateway-WebSocket** und die REST-API:
+
+* **Aktivieren:** Channel mit `type: DISCORD` und folgender Konfiguration erstellen:
+  ```json5
+  {
+    "name": "Mein Discord Bot",
+    "type": "DISCORD",
+    "config": {
+      "token": "<BOT_TOKEN>",          // Pflicht – Bot-Token aus dem Developer Portal
+      "baseUrl": "https://discord.com/api/v10",  // optional, REST-API-Basis-URL
+      "intents": 4609                  // optional, Gateway-Intents (GUILDS | GUILD_MESSAGES | DIRECT_MESSAGES)
+    }
+  }
+  ```
+  Voraussetzung: eine Discord-Bot-Anwendung mit Bot-Token und den nötigen Gateway-Intents (für Server-Nachrichten `GUILD_MESSAGES`, für DMs `DIRECT_MESSAGES`).
+* **Senden:** `POST /api/v1/channels/{id}/send` — `POST {baseUrl}/channels/{channelId}/messages` mit `Authorization: Bot <token>`; `channelId` wird aus `threadId` bzw. `senderId` aufgelöst, die externe `id` wird erfasst
+* **Empfangen:** `startReceiving` ermittelt via `GET {baseUrl}/gateway` die Gateway-URL und verbindet sich mit dem eingebauten Jakarta-WebSocket-Client; beim `Hello`-Frame (op 10) wird ein `Identify`-Frame (op 2) mit Token und Intents gesendet, Heartbeat-Anfragen (op 1) werden beantwortet, und `MESSAGE_CREATE`-Dispatches werden an den `InboundMessageHandler` delegiert
+* **Verfügbarkeit:** `isAvailable()` liefert `true`, wenn der Channel aktiv ist und ein `token` gesetzt ist
+
 ## Tests
 
 ```bash

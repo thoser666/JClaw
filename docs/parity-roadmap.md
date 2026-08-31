@@ -80,7 +80,7 @@ OpenClaw-Kernfeature: Nachrichten von/nach externen Plattformen.
 | P3-01 | Channel-API | Abstraktion (send/receive) + Session-Bindung (DM-/Thread-Bindung) | 🔴 | ✅ |
 | P3-02 | Telegram | Channel-Adapter (Polling/Webhook) | 🟡 | ✅ |
 | P3-03 | Slack | Channel-Adapter (Socket Mode) | 🟡 | ✅ |
-| P3-04 | Discord | Channel-Adapter (WebSocket) | 🟡 | ⬜ |
+| P3-04 | Discord | Channel-Adapter (WebSocket) | 🟡 | ✅ |
 | P3-05 | WhatsApp | Channel-Adapter | 🟡 | ⬜ |
 | P3-06 | Weitere Channels | Buzz (Nostr), ClickClack, IRC, Google Chat, Synology Chat, Mattermost, Feishu u. a. | 🟢 | ⬜ |
 
@@ -150,6 +150,8 @@ Anmerkungen:
 
 > **Slack-Adapter (P3-03) getroffen:** `SlackChannelAdapter` implementiert den `ChannelAdapter`-Port für Slack über **Socket Mode** (WebSocket) und die REST-API. Konfiguration im `Channel.config`: `token` (Bot-Token, Pflicht, z. B. `xoxb-…`), `baseUrl` (Standard `https://slack.com/api`). Senden: `POST {baseUrl}/chat.postMessage` mit `Authorization: Bearer {token}`, `channel` aus `threadId`/`senderId`, erfasst die externe `ts`. Empfang: `startReceiving` öffnet via `POST {baseUrl}/apps.connections.open` eine Socket-Mode-WebSocket-URL und verbindet sich mit dem eingebauten Jakarta-WebSocket-Client (`jakarta.websocket`, transitiv via `tomcat-embed-websocket` — keine neue Abhängigkeit). Eingehende `events_api`-Envelopes werden anhand der `envelope_id` bestätigt (Ack), `event_callback`-Nachrichten zu `ChannelMessage.inbound` konvertiert (content, senderId=user, threadId=channel, externalId=event_id/ts). Für Testbarkeit sind `WebSocketConnector` (funktional) und `SessionHandle` als injizierbare Abstraktion entkoppelt; die reale Verbindung übernimmt ein statischer Default (`connectSocket`) mit `@ClientEndpoint`-Klasse. Adapter ist als `@Component` mit `@ConditionalOnProperty(jclaw.channels.enabled=true)` registriert. 10 Tests (Verfügbarkeit, senden inkl. ts/Auth-Header/Body, Fehlerfälle, apps.connections.open, Envelope-Dispatch + Ack, ignorierbare Envelope-Typen).
 
+> **Discord-Adapter (P3-04) getroffen:** `DiscordChannelAdapter` implementiert den `ChannelAdapter`-Port für Discord über den **Gateway-WebSocket** und die REST-API. Konfiguration im `Channel.config`: `token` (Bot-Token, Pflicht), `baseUrl` (Standard `https://discord.com/api/v10`), `intents` (optional, Standard 4609 = GUILDS | GUILD_MESSAGES | DIRECT_MESSAGES). Senden: `POST {baseUrl}/channels/{channelId}/messages` mit `Authorization: Bot {token}`, `channelId` aus `threadId`/`senderId`, erfasst die externe `id`. Empfang: `startReceiving` ermittelt über `GET {baseUrl}/gateway` die Gateway-URL und verbindet sich mit dem eingebauten Jakarta-WebSocket-Client; beim `Hello`-Frame (op 10) wird der `Identify`-Frame (op 2) mit Token + Intents gesendet, auf Heartbeat-Anfragen (op 1) wird mit einem Heartbeat geantwortet, und `MESSAGE_CREATE`-Dispatches (op 0) werden zu `ChannelMessage.inbound` konvertiert (content, senderId/senderName=author, threadId=channel_id, externalId=id). Für Testbarkeit sind `WebSocketConnector` (funktional) und `SessionHandle` als injizierbare Abstraktion entkoppelt; die reale Verbindung übernimmt ein statischer Default (`connectSocket`) mit `@ClientEndpoint`-Klasse. Adapter ist als `@Component` mit `@ConditionalOnProperty(jclaw.channels.enabled=true)` registriert. 11 Tests (Verfügbarkeit, senden inkl. id/Auth-Header/Pfad/Body, Fehlerfälle, /gateway, Identify beim Hello, Heartbeat-Antwort, MESSAGE_CREATE-Dispatch, ignorierbare Frames).
+
 > **Plugin-SDK-Stand (2026.6.34):** `before_agent_start`, Root-`openclaw/plugin-sdk`-Imports, `providerAuthEnvVars`/`channelEnvVars` werden nach dem 24.07.2026 entfernt. Die Node-Sidecar-Laufzeit (P4-01) muss gegen den **aktuellen** SDK-Stand bauen (Subpath-Imports, moderne Hook-Stages, `setup`-Deskriptoren); Details in `openclaw-compat.md` §3. Der Versionsstand der Referenz (2026.7.1 Stable / 2026.8.1-beta.2) ist in `openclaw-compat.md` §1.1 dokumentiert.
 
 > Die Plugin-Laufzeit-Entscheidung (Node-Sidecar vs. GraalJS vs. Java-Reimplementation) ist getroffen: **Node-Sidecar**, siehe [ADR-0001](adr/0001-node-sidecar-plugin-runtime.md). Das Bridge-Protokoll ist vollständig spezifiziert (siehe [bridge-protocol.md](bridge-protocol.md), P1-03).
@@ -166,4 +168,5 @@ Ein Baustein gilt als paritätisch, wenn:
 
 ## Nächste Schritte
 
-1. **P3-04** Discord — Channel-Adapter (WebSocket) für Discord.
+1. **P3-05** Weitere Channel-Adapter (WhatsApp, Signal, Email, X, …) — und die Ingress-Monitor-Abstraktion aus dem OpenClaw-Plugin-SDK nachbilden.
+2. **P4-01** Node-Sidecar-Plugin-Laufzeit — gegen den aktuellen Plugin-SDK-Stand (Subpath-Imports, moderne Hook-Stages).
