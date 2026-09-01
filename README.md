@@ -617,6 +617,28 @@ Der `DiscordChannelAdapter` verbindet JClaw mit Discord über den **Gateway-WebS
 * **Empfangen:** `startReceiving` ermittelt via `GET {baseUrl}/gateway` die Gateway-URL und verbindet sich mit dem eingebauten Jakarta-WebSocket-Client; beim `Hello`-Frame (op 10) wird ein `Identify`-Frame (op 2) mit Token und Intents gesendet, Heartbeat-Anfragen (op 1) werden beantwortet, und `MESSAGE_CREATE`-Dispatches werden an den `InboundMessageHandler` delegiert
 * **Verfügbarkeit:** `isAvailable()` liefert `true`, wenn der Channel aktiv ist und ein `token` gesetzt ist
 
+#### WhatsApp (P3-05)
+
+Der `WhatsAppChannelAdapter` verbindet JClaw mit WhatsApp über die **Meta WhatsApp Cloud API** (Graph API):
+
+* **Aktivieren:** Channel mit `type: WHATSAPP` und folgender Konfiguration erstellen:
+  ```json5
+  {
+    "name": "Mein WhatsApp Bot",
+    "type": "WHATSAPP",
+    "config": {
+      "token": "<META_ACCESS_TOKEN>",   // Pflicht – System-User-Token der Meta-App
+      "phoneNumberId": "<PHONE_NUMBER_ID>", // Pflicht – WhatsApp Business Phone Number ID
+      "graphUrl": "https://graph.facebook.com/v21.0", // optional, Graph-API-Basis-URL
+      "verifyToken": "<WEBHOOK_VERIFY_TOKEN>" // optional, für den Meta-Webhook-Handshake
+    }
+  }
+  ```
+  Voraussetzung: eine Meta-App mit **WhatsApp Business Platform-Cloud-API**-Produkt, ein System-User-Token und eine registrierte WhatsApp-Business-Telefonnummer.
+* **Senden:** `POST /api/v1/channels/{id}/send` — `POST {graphUrl}/{phoneNumberId}/messages` mit `Authorization: Bearer <token>` und `{"messaging_product":"whatsapp","to":…,"text":{"body":…}}`; `to` wird aus `threadId` bzw. `senderId` aufgelöst, die externe `messages[0].id` wird erfasst
+* **Empfangen:** push-basiert über den **Meta-Webhook** — Meta liefert Nachrichten per Webhook an deine URL (z. B. in den vorhandenen `POST /api/v1/channels/{id}/inbound`-Endpoint). Der Adapter liefert `verifyWebhook()` (Hub-Challenge-Handshake für den GET-Gegencheck) und `inboundFromWebhook()` (Parsen des Meta-Payloads in eine eingehende Nachricht)
+* **Verfügbarkeit:** `isAvailable()` liefert `true`, wenn der Channel aktiv ist und `token` sowie `phoneNumberId` gesetzt sind
+
 ## Tests
 
 ```bash

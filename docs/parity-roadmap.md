@@ -81,7 +81,7 @@ OpenClaw-Kernfeature: Nachrichten von/nach externen Plattformen.
 | P3-02 | Telegram | Channel-Adapter (Polling/Webhook) | 🟡 | ✅ |
 | P3-03 | Slack | Channel-Adapter (Socket Mode) | 🟡 | ✅ |
 | P3-04 | Discord | Channel-Adapter (WebSocket) | 🟡 | ✅ |
-| P3-05 | WhatsApp | Channel-Adapter | 🟡 | ⬜ |
+| P3-05 | WhatsApp | Channel-Adapter | 🟡 | ✅ |
 | P3-06 | Weitere Channels | Buzz (Nostr), ClickClack, IRC, Google Chat, Synology Chat, Mattermost, Feishu u. a. | 🟢 | ⬜ |
 
 ---
@@ -152,6 +152,8 @@ Anmerkungen:
 
 > **Discord-Adapter (P3-04) getroffen:** `DiscordChannelAdapter` implementiert den `ChannelAdapter`-Port für Discord über den **Gateway-WebSocket** und die REST-API. Konfiguration im `Channel.config`: `token` (Bot-Token, Pflicht), `baseUrl` (Standard `https://discord.com/api/v10`), `intents` (optional, Standard 4609 = GUILDS | GUILD_MESSAGES | DIRECT_MESSAGES). Senden: `POST {baseUrl}/channels/{channelId}/messages` mit `Authorization: Bot {token}`, `channelId` aus `threadId`/`senderId`, erfasst die externe `id`. Empfang: `startReceiving` ermittelt über `GET {baseUrl}/gateway` die Gateway-URL und verbindet sich mit dem eingebauten Jakarta-WebSocket-Client; beim `Hello`-Frame (op 10) wird der `Identify`-Frame (op 2) mit Token + Intents gesendet, auf Heartbeat-Anfragen (op 1) wird mit einem Heartbeat geantwortet, und `MESSAGE_CREATE`-Dispatches (op 0) werden zu `ChannelMessage.inbound` konvertiert (content, senderId/senderName=author, threadId=channel_id, externalId=id). Für Testbarkeit sind `WebSocketConnector` (funktional) und `SessionHandle` als injizierbare Abstraktion entkoppelt; die reale Verbindung übernimmt ein statischer Default (`connectSocket`) mit `@ClientEndpoint`-Klasse. Adapter ist als `@Component` mit `@ConditionalOnProperty(jclaw.channels.enabled=true)` registriert. 11 Tests (Verfügbarkeit, senden inkl. id/Auth-Header/Pfad/Body, Fehlerfälle, /gateway, Identify beim Hello, Heartbeat-Antwort, MESSAGE_CREATE-Dispatch, ignorierbare Frames).
 
+> **WhatsApp-Adapter (P3-05) getroffen:** `WhatsAppChannelAdapter` implementiert den `ChannelAdapter`-Port für WhatsApp über die **Meta WhatsApp Cloud API** (Graph API). Konfiguration im `Channel.config`: `token` (Meta-System-User-Token, Pflicht), `phoneNumberId` (WhatsApp Business Phone Number ID, Pflicht), `graphUrl` (Standard `https://graph.facebook.com/v21.0`), `verifyToken` (optional, für den Meta-Webhook-Handshake). Senden: `POST {graphUrl}/{phoneNumberId}/messages` mit `Authorization: Bearer {token}` und `{"messaging_product":"whatsapp","to":…,"text":{"body":…}}`; `to` aus `threadId`/`senderId`, erfasst die externe `messages[0].id`. Empfang ist **push-basiert** (Meta-Webhook) — `startReceiving`/`stopReceiving` bleiben Default-No-ops; der Adapter stellt `verifyWebhook()` (Hub-Challenge-Handshake) und `inboundFromWebhook()` (Parsen des Meta-Payloads in `ChannelMessage.inbound`; content, senderId/threadId=wa_id, senderName=profile.name, externalId=id) bereit. Adapter ist als `@Component` mit `@ConditionalOnProperty(jclaw.channels.enabled=true)` registriert. 10 Tests (Verfügbarkeit, senden inkl. id/Auth-Header/Pfad/Body, Fehlerfälle, Webhook-Verifikation, Inbound-Parsing, ignorierbare non-Message-Payloads).
+
 > **Plugin-SDK-Stand (2026.6.34):** `before_agent_start`, Root-`openclaw/plugin-sdk`-Imports, `providerAuthEnvVars`/`channelEnvVars` werden nach dem 24.07.2026 entfernt. Die Node-Sidecar-Laufzeit (P4-01) muss gegen den **aktuellen** SDK-Stand bauen (Subpath-Imports, moderne Hook-Stages, `setup`-Deskriptoren); Details in `openclaw-compat.md` §3. Der Versionsstand der Referenz (2026.7.1 Stable / 2026.8.1-beta.2) ist in `openclaw-compat.md` §1.1 dokumentiert.
 
 > Die Plugin-Laufzeit-Entscheidung (Node-Sidecar vs. GraalJS vs. Java-Reimplementation) ist getroffen: **Node-Sidecar**, siehe [ADR-0001](adr/0001-node-sidecar-plugin-runtime.md). Das Bridge-Protokoll ist vollständig spezifiziert (siehe [bridge-protocol.md](bridge-protocol.md), P1-03).
@@ -168,5 +170,5 @@ Ein Baustein gilt als paritätisch, wenn:
 
 ## Nächste Schritte
 
-1. **P3-05** Weitere Channel-Adapter (WhatsApp, Signal, Email, X, …) — und die Ingress-Monitor-Abstraktion aus dem OpenClaw-Plugin-SDK nachbilden.
+1. **P3-06** Weitere Channel-Adapter (Buzz, IRC, Google Chat, Mattermost, Email, X, …) — und die **Ingress-Monitor-Abstraktion** aus dem OpenClaw-Plugin-SDK nachbilden (durable admission, polling, pruning, claim-identity validation, adoption handoff, shutdown).
 2. **P4-01** Node-Sidecar-Plugin-Laufzeit — gegen den aktuellen Plugin-SDK-Stand (Subpath-Imports, moderne Hook-Stages).
