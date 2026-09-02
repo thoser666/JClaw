@@ -1,6 +1,6 @@
 # JClaw → OpenClaw-Parität: Roadmap
 
-Stand: 2026-08-25 · Basis: `docs/openclaw-compat.md` (Formatanalyse) · Referenz-Version: OpenClaw **2026.7.1** (Stable) / **2026.8.1-beta.2** (Betainhalt) · Ziel: **100 % Parität** zu OpenClaw.
+Stand: 2026-09-02 · Basis: `docs/openclaw-compat.md` (Formatanalyse) · Referenz-Version: OpenClaw **2026.7.1** (Stable) / **2026.8.2** (aktuelle Linie, 01.09.2026) · Ziel: **100 % Parität** zu OpenClaw.
 
 ## Status-Legende
 
@@ -15,9 +15,9 @@ Prioritäten: 🔴 hoch · 🟡 mittel · 🟢 niedrig
 
 ---
 
-## Phase 0 — Fundament (✅ abgeschlossen)
+## Thema A — Agent-Kern (Skills, Tools, Loop)
 
-Hexagonale Basis, damit alle weiteren Bausteine aufsetzen können.
+Hexagonale Basis; alles ✅. Kapselt den Kern-Agenten: Skills, Kern-Tools, MCP, Web, Policies, Fehlerbehandlung.
 
 | ID | Baustein | Beschreibung | Priorität | Status |
 |---|---|---|---|---|
@@ -28,36 +28,30 @@ Hexagonale Basis, damit alle weiteren Bausteine aufsetzen können.
 | P0-05 | Kern-Tool: Datei | `readFile`, `listDirectory`, `writeFile` mit Workdir-Scoping + Traversal-Schutz | 🔴 | ✅ |
 | P0-06 | Kern-Tool: Datei-Suche | `glob` (Glob-Muster) und `grep` (Regex) innerhalb des Workdirs | 🔴 | ✅ |
 | P0-07 | Kern-Tool: Shell | `runCommand` mit Workdir, Timeout, Output-Limit (opt-in, Deny-by-Default) | 🟡 | ✅ |
-| P0-08 | Konversations-Memory | Message-Window je `contextId`, Speicherung/Abfrage/Löschung über REST | 🔴 | ✅ |
-| P0-09 | Persistenz | H2-JDBC-`ChatMemory` (`chat_message`-Tabelle, überlebt Neustarts) | 🔴 | ✅ |
-| P0-10 | Skill-/Konversations-API | `GET /api/v1/skills`, `GET|DELETE /api/v1/conversations/{contextId}` | 🟡 | ✅ |
 | P0-11 | Agent-Loop | Tool-Calling-Loop mit Iterationslimit + `AgentLoopLimitExceededException` | 🔴 | ✅ |
 | P0-12 | Fehlerbehandlung | Globaler `@RestControllerAdvice` (400/500) | 🟡 | ✅ |
-
----
-
-## Phase 1 — Kern-Parität (abgeschlossen ✅)
-
-Agent-Kern-Fähigkeiten, die OpenClaw zusätzlich bietet und die ohne JS möglich sind. Alle Bausteine (P1-01 bis P1-12) sind implementiert.
-
-| ID | Baustein | Beschreibung | Priorität | Status |
-|---|---|---|---|---|
-| P1-01 | Plugin Control-Plane | Manifeste lesen/validieren (`openclaw.plugin.json` + Agent-Plugins/Codex/Claude/Cursor), ohne Codeausführung; `GET /api/v1/plugins` | 🔴 | ✅ |
-| P1-02 | Architektur-Entscheidung | **Node-Sidecar bestätigt** (JSON-RPC 2.0 über stdio). Spike validiert Java ↔ Node-Kommunikation. Siehe [ADR-0001](adr/0001-node-sidecar-plugin-runtime.md) | 🔴 | ✅ |
-| P1-03 | Bridge-Protokoll | Vollständige JSON-RPC-Spezifikation (Framing, Methoden-Katalog, Fehlercodes, Timeouts, Restart) — [bridge-protocol.md](bridge-protocol.md); Bridge als verwaltbarer Dienst (Handshake, Call-/Ready-Timeout, `restart()`) | 🔴 | ✅ |
 | P1-04 | MCP-Client | `mcp.servers`-Unterstützung: externe Model Context Protocol-Server als Tools integrieren (`jclaw.mcp.servers.*`, HTTP + STDIO, Deny-by-Default) | 🔴 | ✅ |
 | P1-05 | Web-Tools | `web_fetch` (mit `allowedDomains`-Policy) und `web_search` | 🟡 | ✅ |
 | P1-06 | Kern-Tool: Patch | `apply_patch` für strukturierte Datei-Änderungen | 🟡 | ✅ |
-| P1-07 | Kern-Tool: Agent | `spawn_agent` / Multi-Agent-Subprozesse (Deny-by-Default, max-depth-Limit) | 🟢 | ✅ |
 | P1-08 | Tool-Policies | Allow-/Denyliste je Agent via `jclaw.agent.tools.allow`/`.deny` (Deny-by-Default, Deny schlägt Allow; deaktivierte Tools erscheinen nicht im Tool-Schema) | 🟡 | ✅ |
+
+## Thema B — Memory, Persistenz & Sessions
+
+Konversations-, Session- und Wissens-Memory; alles bis auf die Memory-Erweiterungen lieferbar.
+
+| ID | Baustein | Beschreibung | Priorität | Status |
+|---|---|---|---|---|
+| P0-08 | Konversations-Memory | Message-Window je `contextId`, Speicherung/Abfrage/Löschung über REST | 🔴 | ✅ |
+| P0-09 | Persistenz | H2-JDBC-`ChatMemory` (`chat_message`-Tabelle, überlebt Neustarts) | 🔴 | ✅ |
+| P0-10 | Skill-/Konversations-API | `GET /api/v1/skills`, `GET|DELETE /api/v1/conversations/{contextId}` | 🟡 | ✅ |
 | P1-09 | Session-Konzept | Von `contextId` auf Sessions erweitern (Reset-Strategien `daily`/`idle`, generierte Titel, REST-API); Session-first-UI seit 2026.7.1 als Referenz. Scope-Abgrenzung: Thread-Bindings, dmScope, Session-Gruppen, Transcript-Export und Kontext-Verbrauch sind P2-04 (Gateway) | 🟡 | ✅ |
 | P1-10 | Compaction | Kontext-Kompression bei Session-Grenzen | 🟢 | ✅ |
-| P1-11 | Hooks | `HOOK.md`-Scripts + Lifecycle-Events (before_tool_call, before_agent_run, …) via Script-Runner; Hook-Stage-Migration beachten (`before_agent_start`/SDK-Root-Imports seit 2026.6.34 entfernt) | 🟡 | ✅ |
-| P1-12 | Cron-Jobs | Wiederkehrende Agent-Jobs (`cron.*`-Konfiguration) | 🟢 | ✅ |
+| P4-02 | Wissen-Memory | Semantisches Memory über Embeddings (z. B. pgvector/Chroma), `kind: "memory"`, Injektion relevanter Chunks | 🟡 | ⬜ |
+| P4-10 | Backup & Restore | `jclaw backup`-Semantik nach OpenClaw-Vorbild (`create|list|verify|restore`, globale + Per-Agent-Snapshots, 2026.8.1-beta.2) | 🟢 | ⬜ |
 
----
+## Thema C — Konfiguration, Gateway & Control-UI
 
-## Phase 2 — Konfiguration & Gateway
+Steuerungsebene: Konfig, Auth, Hot-Reload, Web-UI, Themes.
 
 | ID | Baustein | Beschreibung | Priorität | Status |
 |---|---|---|---|---|
@@ -69,9 +63,18 @@ Agent-Kern-Fähigkeiten, die OpenClaw zusätzlich bietet und die ohne JS möglic
 | P2-06 | Auth | Gateway-Authentifizierung (API-Token, Bearer-Header, SHA-256-Hash, Deny-by-Default) | 🟡 | ✅ |
 | P2-09 | Color-Schemes | Light/Dark-Theme via CSS-Variablen (`prefers-color-scheme` + manueller Toggle), Designsystem für die Control-UI | 🟡 | ✅ |
 
----
+## Thema D — Automations & Workflows
 
-## Phase 3 — Channels (100 %-Parität)
+Zeit- und eventgetriebene Agent-Ausführung (Cron, Hooks) plus neue OpenClaw-Features (Background-Sessions, Goals, queue-basierte Follow-ups).
+
+| ID | Baustein | Beschreibung | Priorität | Status |
+|---|---|---|---|---|
+| P1-11 | Hooks | `HOOK.md`-Scripts + Lifecycle-Events (before_tool_call, before_agent_run, …) via Script-Runner; Hook-Stage-Migration beachten (`before_agent_start`/SDK-Root-Imports seit 2026.6.34 entfernt) | 🟡 | ✅ |
+| P1-12 | Cron-Jobs | Wiederkehrende Agent-Jobs (`cron.*`-Konfiguration) | 🟢 | ✅ |
+| P4-07 | Goals & Queues | **Neu:** Goal-Erstellung/-Bearbeitung direkt im Composer, Follow-up-Queue-Persistenz über Gateway-Neustarts (OpenClaw 2026.8.2; PR #82572 bringt Queue-Persistenz) | 🟡 | ⬜ |
+| P4-08 | Background-Sessions | **Neu:** Neue Session im Hintergrund starten, ohne Seitenwechsel; Completion-Benachrichtigung (2026.8.2) | 🟢 | ⬜ |
+
+## Thema E — Channels (100 %-Parität)
 
 OpenClaw-Kernfeature: Nachrichten von/nach externen Plattformen.
 
@@ -81,19 +84,50 @@ OpenClaw-Kernfeature: Nachrichten von/nach externen Plattformen.
 | P3-02 | Telegram | Channel-Adapter (Polling/Webhook) | 🟡 | ✅ |
 | P3-03 | Slack | Channel-Adapter (Socket Mode) | 🟡 | ✅ |
 | P3-04 | Discord | Channel-Adapter (WebSocket) | 🟡 | ✅ |
-| P3-05 | WhatsApp | Channel-Adapter | 🟡 | ✅ |
+| P3-05 | WhatsApp | Channel-Adapter (Cloud API) | 🟡 | ✅ |
 | P3-06 | Weitere Channels | Buzz (Nostr), ClickClack, IRC, Google Chat, Synology Chat, Mattermost, Feishu u. a. | 🟢 | ⬜ |
+| P3-07 | Media-Message-Support | **Neu:** Spoken-Replies (TTS-Sprachnachrichten) in privaten Replies (Discord/Telegram, 2026.8.2) — Senden von Audio über den jeweiligen Adapter | 🟢 | ⬜ |
+| P3-08 | Ingress-Monitor-Abstraktion | Durable admission, polling, pruning, claim-identity validation, adoption handoff, shutdown (SDK-Vorbild, family-readiness) | 🟢 | ⬜ |
 
----
+## Thema F — Browser, Computer Use & Talk (OpenClaw 2026.8.x)
 
-## Phase 4 — Fortgeschrittene Parität
+**Neues Themenfeld** für die 2026.8.x-Feature-Klassen, die in der bisherigen Roadmap fehlten.
 
 | ID | Baustein | Beschreibung | Priorität | Status |
 |---|---|---|---|---|
+| P4-11 | Browser-Steuerung | **Neu:** Browser-Steuerung ohne laufendes Gateway (Chrome-Extension weckt lokales Relay, 2026.8.2) + Browser-/Computer-Use-Tooling | 🟡 | ⬜ |
+| P4-12 | Computer Use | **Neu:** Bildschirm-/Interface-Steuerung auf Desktop-Ebene | 🟢 | ⬜ |
+| P4-13 | Talk (Realtime-Voice) | **Neu:** Browser-basiertes Talk: Mikrofon-Permission, geordnete Turns, Interruption-Recovery (OpenAI WebRTC / Google Live, 2026.8.1/8.2) | 🟢 | ⬜ |
+| P4-14 | Voice Calls & TTS-Personas | **Neu:** Call-Turn-Taking, TTS-Personas via SecretRefs, Multilinguale Auto-Sprach-Erkennung (2026.8.2) | 🟢 | ⬜ |
+
+## Thema G — Multi-Agent & Orchestrierung
+
+Sub-Agenten und deren Verwaltung.
+
+| ID | Baustein | Beschreibung | Priorität | Status |
+|---|---|---|---|---|
+| P1-07 | Kern-Tool: Agent | `spawn_agent` / Multi-Agent-Subprozesse (Deny-by-Default, max-depth-Limit) | 🟢 | ✅ |
 | P4-01 | Plugin-Laufzeit | Node-Sidecar führt `definePluginEntry`/`defineChannelPluginEntry` aus (setzt P1-03 voraus) | 🔴 | 🚫 |
-| P4-02 | Wissen-Memory | Semantisches Memory über Embeddings (z. B. pgvector/Chroma), `kind: "memory"`, Injektion relevanter Chunks | 🟡 | ⬜ |
 | P4-03 | Media-Provider | Speech/Media-Provider (TTS/STT) | 🟢 | ⬜ |
-| P4-04 | Provider-Abstraktion | Modell-Provider über Ollama hinaus (OpenAI-kompatibel, Anthropic, …) via Spring AI; Referenz-Stand 2026.7.1: GPT-5.6 (+ Sol/Terra/Luna), Claude Sonnet 5, Meta Muse Spark 1.1, Featherless, ClawRouter, lokales Setup (Ollama/llama.cpp/LM Studio) | 🟡 | ⬜ |
+| P4-04 | Provider-Abstraktion | Modell-Provider über Ollama hinaus (OpenAI-kompatibel, Anthropic, …) via Spring AI; Referenz-Stand 2026.8.x: GPT-5.6 (+ Sol/Terra/Luna), Claude Sonnet 5, Meta Muse Spark 1.1, Featherless, ClawRouter, lokales Setup (Ollama/llama.cpp/LM Studio) | 🟡 | ⬜ |
+
+## Thema H — Plugin-Ökosystem & SDK-Anbindung
+
+Manifeste, Bridge, Laufzeit; Node-Sidecar als Zielarchitektur.
+
+| ID | Baustein | Beschreibung | Priorität | Status |
+|---|---|---|---|---|
+| P1-01 | Plugin Control-Plane | Manifeste lesen/validieren (`openclaw.plugin.json` + Agent-Plugins/Codex/Claude/Cursor), ohne Codeausführung; `GET /api/v1/plugins` | 🔴 | ✅ |
+| P1-02 | Architektur-Entscheidung | **Node-Sidecar bestätigt** (JSON-RPC 2.0 über stdio). Spike validiert Java ↔ Node-Kommunikation. Siehe [ADR-0001](adr/0001-node-sidecar-plugin-runtime.md) | 🔴 | ✅ |
+| P1-03 | Bridge-Protokoll | Vollständige JSON-RPC-Spezifikation (Framing, Methoden-Katalog, Fehlercodes, Timeouts, Restart) — [bridge-protocol.md](bridge-protocol.md); Bridge als verwaltbarer Dienst (Handshake, Call-/Ready-Timeout, `restart()`) | 🔴 | ✅ |
+| P4-09 | Plugin-Security-Maßnahmen | **Neu:** Secret-Egress-Host-Binding (fail-closed), Plugin-Install-Provenance, Caps für feindliche Response-Größen (2026.6.34/8.1) | 🟡 | ⬜ |
+
+## Thema I — Memory-Wissen & Skill-Workshop
+
+Semantisches Memory und Skill-Ops abseits des Kern-Loaders.
+
+| ID | Baustein | Beschreibung | Priorität | Status |
+|---|---|---|---|---|
 | P4-05 | Paritäts-Testsuite | Automatisierte Konformitäts-Checks: Manifeste, Konfig, Hooks, Tool-Schemas gegen OpenClaw-Referenz | 🟡 | ⬜ |
 | P4-06 | Skill Workshop | Vorschlags-Verwaltung (`skills.workshop.*`): Proposals, apply/reject/quarantine, `approvalPolicy: "pending"` (seit 2026.6.1) | 🟢 | ⬜ |
 
@@ -107,14 +141,16 @@ Die Bausteine werden nicht einzeln, sondern in Versionen mit einem in sich gesch
 |---|---|---|---|
 | **0.1.0** | Agent-Kern | ~~P1-06~~ ✅ `apply_patch`, ~~P1-07~~ ✅ `spawn_agent`, ~~P1-08~~ ✅ Tool-Policies, ~~P1-09~~ ✅ Session-Konzept | Verlässlicher Einzel-Agent mit Policy-, Session- und Multi-Agent-Modell |
 | **0.2.0** | Konfiguration & Gateway | ~~P2-01~~ ✅ JSON5-Konfig, ~~P2-02~~ ✅ Schema-Validierung, ~~P2-03~~ ✅ Hot-Reload, ~~P2-04~~ ✅ Gateway-Steuerung, ~~P2-06~~ ✅ Auth, ~~P2-09~~ ✅ Color-Schemes | Steuerungsebene als Anker für Hooks, Cron und Channels |
-| **0.3.0** | Multi-Agent & Plugins | P1-07 `spawn_agent`, P4-01 Plugin-Laufzeit, P4-04 Provider-Abstraktion, P1-12 Cron | OpenClaw-Parität beim Agent-Verhalten |
-| **0.4.0** | Channels | P3-01 Channel-API, P3-02 Telegram, P3-03 Slack, P3-04 Discord, ~~P2-05~~ ✅ Control-UI | Nutzbares Multi-Plattform-Produkt |
-| **1.0.0** | 100 % Parität | ~~P1-11~~ ✅ Hooks, ~~P1-10~~ ✅ Compaction, P4-02 Memory, P4-03 Media, P4-05 Paritäts-Testsuite, P4-06 Skill Workshop, restliche Channels | Feature-Parität, erste stabile Version |
+| **0.3.0** | Multi-Agent & Plugins | P4-01 Plugin-Laufzeit, P4-04 Provider-Abstraktion, P4-09 Plugin-Security | OpenClaw-Parität beim Agent-Verhalten |
+| **0.4.0** | Channels | P3-06 Weitere Channels, P3-07 Media-Message-Support, P3-08 Ingress-Monitor, ~~P2-05~~ ✅ Control-UI | Nutzbares Multi-Plattform-Produkt |
+| **0.5.0** | Automations & Memory | P4-07 Goals & Queues, P4-08 Background-Sessions, P4-02 Wissen-Memory, P4-10 Backup & Restore | Zeit-/eventgetriebene Agent-Ausführung + Wissensspeicher |
+| **0.6.0** | Browser, Talk & Voice | P4-11 Browser-Steuerung, P4-12 Computer Use, P4-13 Talk, P4-14 Voice Calls & TTS-Personas | OpenClaw-2026.8.x-Features für Realtime & Desktop-Steuerung |
+| **1.0.0** | 100 % Parität | ~~P1-11~~ ✅ Hooks, ~~P1-10~~ ✅ Compaction, P4-03 Media-Provider, P4-05 Paritäts-Testsuite, P4-06 Skill Workshop, P4-01 Plugin-Laufzeit | Feature-Parität, erste stabile Version |
 
 Anmerkungen:
 
 - `0.1.0-SNAPSHOT` ist die aktuelle Entwicklungsversion (siehe `pom.xml`); abgeschlossene Versionen werden als Release getaggt.
-- Abhängigkeiten: P1-12 (Cron) setzt das Session-Konzept (P1-09) und das Gateway voraus, P4-01 setzt die Bridge (P1-03) voraus, Channels setzen die Gateway-Steuerung (P2-04) voraus.
+- Abhängigkeiten: P1-12 (Cron) setzt das Session-Konzept (P1-09) und das Gateway voraus, P4-01 setzt die Bridge (P1-03) voraus, Channels setzen die Gateway-Steuerung (P2-04) voraus, P4-13/14 (Talk/Voice) setzen P4-03 (Media-Provider) voraus.
 
 ## Offene Architektur-Entscheidungen
 
@@ -170,5 +206,7 @@ Ein Baustein gilt als paritätisch, wenn:
 
 ## Nächste Schritte
 
-1. **P3-06** Weitere Channel-Adapter (Buzz, IRC, Google Chat, Mattermost, Email, X, …) — und die **Ingress-Monitor-Abstraktion** aus dem OpenClaw-Plugin-SDK nachbilden (durable admission, polling, pruning, claim-identity validation, adoption handoff, shutdown).
-2. **P4-01** Node-Sidecar-Plugin-Laufzeit — gegen den aktuellen Plugin-SDK-Stand (Subpath-Imports, moderne Hook-Stages).
+1. **P3-06/P3-08** Weitere Channel-Adapter (Buzz, IRC, Google Chat, Mattermost, Email, X, …) — und die **Ingress-Monitor-Abstraktion** aus dem OpenClaw-Plugin-SDK nachbilden (durable admission, polling, pruning, claim-identity validation, adoption handoff, shutdown); dabei **P3-07** Media-Message-Support berücksichtigen.
+2. **P4-01** Node-Sidecar-Plugin-Laufzeit — gegen den aktuellen Plugin-SDK-Stand (Subpath-Imports, moderne Hook-Stages), mit **P4-09** Security-Maßnahmen.
+3. **P4-07/P4-08** Automations-Erweiterungen aus OpenClaw 2026.8.x (Goals & Queues, Background-Sessions).
+4. **P4-11–P4-14** Browser-/Talk-/Voice-Features — Referenz OpenClaw 2026.8.2 (Browser-Steuerung ohne Gateway, Realtime-Talk, TTS-Personas).
