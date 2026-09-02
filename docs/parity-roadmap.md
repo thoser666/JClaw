@@ -46,8 +46,9 @@ Konversations-, Session- und Wissens-Memory; alles bis auf die Memory-Erweiterun
 | P0-10 | Skill-/Konversations-API | `GET /api/v1/skills`, `GET|DELETE /api/v1/conversations/{contextId}` | 🟡 | ✅ |
 | P1-09 | Session-Konzept | Von `contextId` auf Sessions erweitern (Reset-Strategien `daily`/`idle`, generierte Titel, REST-API); Session-first-UI seit 2026.7.1 als Referenz. Scope-Abgrenzung: Thread-Bindings, dmScope, Session-Gruppen, Transcript-Export und Kontext-Verbrauch sind P2-04 (Gateway) | 🟡 | ✅ |
 | P1-10 | Compaction | Kontext-Kompression bei Session-Grenzen | 🟢 | ✅ |
-| P4-02 | Wissen-Memory | Semantisches Memory über Embeddings (z. B. pgvector/Chroma), `kind: "memory"`, Injektion relevanter Chunks | 🟡 | ⬜ |
+| P4-02 | Wissen-Memory & Open Memory Vault | **Memory als Asset statt Cache:** Rohe Nachrichten bleiben dauerhaft in H2 — Compaction (P1-10) komprimiert nur den LLM-Context, nie den Speicher. Semantisches Memory über Embeddings (z. B. pgvector/Chroma), `kind: "memory"`, Injektion relevanter Chunks. **Open Memory Vault:** Memory-Einträge zusätzlich als Markdown+YAML-Frontmatter (`title`/`type`/`created`/`tags`/`source`) in einen konfigurierbaren Vault-Ordner materialisieren; bidirektionaler Sync (User-Änderungen via Watcher zurückingestet, optional Git-Commit je Änderung); menschenlesbar/-editierbar via Tolaria/Obsidian, anbindbar über deren MCP-Server (P1-04). H2 bleibt Quelle der Wahrheit (kein Dual-Write-Problem). | 🟡 | ⬜ |
 | P4-10 | Backup & Restore | `jclaw backup`-Semantik nach OpenClaw-Vorbild (`create|list|verify|restore`, globale + Per-Agent-Snapshots, 2026.8.1-beta.2) | 🟢 | ⬜ |
+| P4-15 | Shared Memory Pools | **Neu:** Mehrere Agents teilen sich ein Langzeit-Memory (Vektor + BM25 über den dauerhaften Verlauf) statt siloed Memory je Agent — Industrie-Trend, OpenClaw bietet es standardmäßig nicht | 🟢 | ⬜ |
 
 ## Thema C — Konfiguration, Gateway & Control-UI
 
@@ -120,7 +121,8 @@ Manifeste, Bridge, Laufzeit; Node-Sidecar als Zielarchitektur.
 | P1-01 | Plugin Control-Plane | Manifeste lesen/validieren (`openclaw.plugin.json` + Agent-Plugins/Codex/Claude/Cursor), ohne Codeausführung; `GET /api/v1/plugins` | 🔴 | ✅ |
 | P1-02 | Architektur-Entscheidung | **Node-Sidecar bestätigt** (JSON-RPC 2.0 über stdio). Spike validiert Java ↔ Node-Kommunikation. Siehe [ADR-0001](adr/0001-node-sidecar-plugin-runtime.md) | 🔴 | ✅ |
 | P1-03 | Bridge-Protokoll | Vollständige JSON-RPC-Spezifikation (Framing, Methoden-Katalog, Fehlercodes, Timeouts, Restart) — [bridge-protocol.md](bridge-protocol.md); Bridge als verwaltbarer Dienst (Handshake, Call-/Ready-Timeout, `restart()`) | 🔴 | ✅ |
-| P4-09 | Plugin-Security-Maßnahmen | **Neu:** Secret-Egress-Host-Binding (fail-closed), Plugin-Install-Provenance, Caps für feindliche Response-Größen (2026.6.34/8.1) | 🟡 | ⬜ |
+| P4-09 | Plugin-Security-Maßnahmen | **Neu:** Secret-Egress-Host-Binding (fail-closed), Plugin-Install-Provenance, **Credential-Leak-Guardrail** (Token-/Secret-Teile erscheinen nie in Session-Anzeigen/Outbound-Nachrichten; reagiert auf OpenClaw #32970), Caps für feindliche Response-Größen (2026.6.34/8.1) | 🟡 | ⬜ |
+| P4-16 | Stable API & Versionsdisziplin | **Neu:** Schema-/API-Versionierung + Deprecation-Zyklen als Gegenmodell zu OpenClaws breaking-change-Kultur (SDK-Stage-Removals, `Full Release Validation`-Failures); CI-Gate: keine Promotions ohne grüne Referenz-Testsuite | 🟡 | ⬜ |
 
 ## Thema I — Memory-Wissen & Skill-Workshop
 
@@ -128,7 +130,7 @@ Semantisches Memory und Skill-Ops abseits des Kern-Loaders.
 
 | ID | Baustein | Beschreibung | Priorität | Status |
 |---|---|---|---|---|
-| P4-05 | Paritäts-Testsuite | Automatisierte Konformitäts-Checks: Manifeste, Konfig, Hooks, Tool-Schemas gegen OpenClaw-Referenz | 🟡 | ⬜ |
+| P4-05 | Paritäts-Testsuite | Automatisierte Konformitäts-Checks: Manifeste, Konfig, Hooks, Tool-Schemas gegen OpenClaw-Referenz; **Guardrail-Tests**: kein Credential-Leak in Outbound, Egress-Binding, Deny-by-Default | 🟡 | ⬜ |
 | P4-06 | Skill Workshop | Vorschlags-Verwaltung (`skills.workshop.*`): Proposals, apply/reject/quarantine, `approvalPolicy: "pending"` (seit 2026.6.1) | 🟢 | ⬜ |
 
 ---
