@@ -35,6 +35,7 @@ Das Projekt folgt der hexagonalen Struktur unter dem Package-Stamm `biz.brumm`:
   * `SpawnAgentTool` (`spawn_agent`) – startet einen Sub-Agenten mit eigenem Prompt und gleichen Werkzeugen (optional, s. u.).
 * **Skills (OpenClaw/AgentSkills-Format):** Skills aus dem konfigurierten Verzeichnis (`SKILL.md` mit YAML-Frontmatter) werden in den System-Prompt injiziert, sobald sie per `jclaw.agent.skills.enabled` aktiviert sind.
 * **Konversations-Memory:** Über eine optionale `contextId` wird der Gesprächsverlauf (Message-Window mit begrenzter Nachrichtenanzahl) pro Kontext gespeichert und bei Folgeanfragen wieder eingespielt. Die Nachrichten werden persistent in einer H2-Datei-Datenbank abgelegt (`./data/jclaw.mv.db`) und überleben so App-Neustarts.
+* **Open Memory Vault (P4-02):** Materialisiert Konversations-Memory als menschenlesbare Markdown-Dokumente in einem konfigurierbaren Verzeichnis — lesbar/editierbar z. B. via Tolaria oder Obsidian. H2 bleibt Quelle der Wahrheit; der Vault ist ein idempotenter Auszug, der Compaction/Neustarts übersteht (siehe [Open Memory Vault](#open-memory-vault-p4-02)).
 * **Plugins (Control-Plane):** Plugin-Manifeste im OpenClaw-Format (`openclaw.plugin.json`) sowie kompatible fremde Bundles (Agent Plugins, Codex, Claude, Cursor) werden gelesen und ohne Codeausführung validiert (Pflichtfelder, Schema-Struktur).
 * **Node-Sidecar-Bridge (P1-03):** Verwaltete JSON-RPC-Bridge zu einem Node.js-Sidecar-Prozess (Handshake, Call-/Ready-Timeout, strukturierte Fehler, Restart) — Grundlage für die Plugin-Laufzeit in P4-01. Spezifikation: [docs/bridge-protocol.md](docs/bridge-protocol.md).
 * **Control-UI (P2-05):** Statische Web-Oberfläche (kein Build-Schritt, keine externen Abhängigkeiten) unter `http://localhost:8080` — Agent-Aufgaben ausführen, Konversationen laden/löschen, Skills und Plugins anzeigen (siehe [Control-UI](#control-ui)).
@@ -117,6 +118,8 @@ Die JSON5-Datei wird beim Start automatisch geladen und überschreibt Werte aus 
 | `jclaw.compaction.enabled` | `false` | LLM-basierte Kontext-Kompression (Deny-by-Default) |
 | `jclaw.compaction.threshold` | `20` | Mindestanzahl Nachrichten vor Compaction |
 | `jclaw.compaction.retain-count` | `4` | Jüngste Nachrichten, die nie komprimiert werden |
+| `jclaw.memory.vault.enabled` | `false` | Open Memory Vault aktivieren (Deny-by-Default) |
+| `jclaw.memory.vault.dir` | `./vault` | Verzeichnis für Markdown-Memory-Dokumente (menschenlesbar/-editierbar, z. B. via Tolaria/Obsidian) |
 | `jclaw.cron.enabled` | `false` | Cron-Job-System aktivieren (Deny-by-Default) |
 | `jclaw.cron.interval` | `60` | Intervall in Sekunden für Job-Prüfung |
 | `jclaw.cron.max-retries` | `3` | Maximale Wiederholungen bei Fehler |
@@ -496,6 +499,8 @@ Zusätzlich zur Agent-API stehen Gateway-Endpoints zur Verfügung:
 | `/api/v1/cron-jobs/{id}` | PUT | Cron-Job aktualisieren |
 | `/api/v1/cron-jobs/{id}` | DELETE | Cron-Job löschen |
 | `/api/v1/cron-jobs/{id}/execute` | POST | Cron-Job manuell ausführen |
+| `/api/v1/memory/{contextId}/sync` | POST | Konversation als Vault-Dokument materialisieren |
+| `/api/v1/memory` | GET | Alle Memory-Vault-Dokumente auflisten |
 | `/api/v1/channels` | GET | Alle Channels auflisten |
 | `/api/v1/channels` | POST | Neuen Channel erstellen |
 | `/api/v1/channels/{id}` | GET | Einzelnen Channel abfragen |
@@ -536,6 +541,15 @@ LLM-basierte Kontext-Kompression für lange Konversationen:
 * **Schwellenwert:** `jclaw.compaction.threshold` (Standard: 20 Nachrichten) — Compaction wird ausgelöst, wenn überschritten
 * **Retain:** `jclaw.compaction.retain-count` (Standard: 4) — Jüngste Nachrichten werden nie komprimiert
 * **Funktionsweise:** Ältere Nachrichten werden durch eine LLM-Zusammenfassung ersetzt, aktuelle Nachrichten bleiben erhalten
+
+### Open Memory Vault (P4-02)
+
+Materialisiert das Konversations-Memory als **menschenlesbare Markdown-Dokumente** (Memory als Asset statt Cache). Anders als die context-abhängige Compaction überlebt der Vault Compaction, Neustarts und Session-Verluste — Nutzer können das Langzeit-Memory direkt durchsuchen und bearbeiten (z. B. mit Tolaria oder Obsidian).
+
+* **Aktivieren:** `jclaw.memory.vault.enabled=true` in `application.properties` oder `openclaw.json`
+* **Verzeichnis:** `jclaw.memory.vault.dir` (Standard: `./vault`) — pro Konversation eine `.md`-Datei mit YAML-Frontmatter (`conversationId`, `title`, `createdAt`, `tags`)
+* **H2 bleibt Quelle der Wahrheit:** Der Vault ist ein idempotenter, lesbarer Auszug — kein Ersatz und kein Dual-Write-Problem
+* **REST-API:** `POST /api/v1/memory/{contextId}/sync` (Konversation als Dokument materialisieren), `GET /api/v1/memory` (alle Vault-Dokumente auflisten)
 
 ### Cron-Jobs (P1-12)
 
