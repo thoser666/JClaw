@@ -35,7 +35,7 @@ Das Projekt folgt der hexagonalen Struktur unter dem Package-Stamm `biz.brumm`:
   * `SpawnAgentTool` (`spawn_agent`) – startet einen Sub-Agenten mit eigenem Prompt und gleichen Werkzeugen (optional, s. u.).
 * **Skills (OpenClaw/AgentSkills-Format):** Skills aus dem konfigurierten Verzeichnis (`SKILL.md` mit YAML-Frontmatter) werden in den System-Prompt injiziert, sobald sie per `jclaw.agent.skills.enabled` aktiviert sind.
 * **Konversations-Memory:** Über eine optionale `contextId` wird der Gesprächsverlauf (Message-Window mit begrenzter Nachrichtenanzahl) pro Kontext gespeichert und bei Folgeanfragen wieder eingespielt. Die Nachrichten werden persistent in einer H2-Datei-Datenbank abgelegt (`./data/jclaw.mv.db`) und überleben so App-Neustarts.
-* **Open Memory Vault (P4-02):** Materialisiert Konversations-Memory als menschenlesbare Markdown-Dokumente in einem konfigurierbaren Verzeichnis — lesbar/editierbar z. B. via Tolaria oder Obsidian. H2 bleibt Quelle der Wahrheit; der Vault ist ein idempotenter Auszug, der Compaction/Neustarts übersteht (siehe [Open Memory Vault](#open-memory-vault-p4-02)).
+* **Open Memory Vault (P4-02):** Materialisiert Konversations-Memory als menschenlesbare Markdown-Dokumente in einem konfigurierbaren Verzeichnis — lesbar/editierbar z. B. via Tolaria oder Obsidian. H2 bleibt Quelle der Wahrheit; der Vault ist ein idempotenter Auszug, der Compaction/Neustarts übersteht. Ein Watcher-Sync (Read-Back) erkennt User-Änderungen an `.md`-Dateien und ingestet sie zurück in die Konversation (siehe [Open Memory Vault](#open-memory-vault-p4-02)).
 * **Plugins (Control-Plane):** Plugin-Manifeste im OpenClaw-Format (`openclaw.plugin.json`) sowie kompatible fremde Bundles (Agent Plugins, Codex, Claude, Cursor) werden gelesen und ohne Codeausführung validiert (Pflichtfelder, Schema-Struktur).
 * **Node-Sidecar-Bridge (P1-03):** Verwaltete JSON-RPC-Bridge zu einem Node.js-Sidecar-Prozess (Handshake, Call-/Ready-Timeout, strukturierte Fehler, Restart) — Grundlage für die Plugin-Laufzeit in P4-01. Spezifikation: [docs/bridge-protocol.md](docs/bridge-protocol.md).
 * **Control-UI (P2-05):** Statische Web-Oberfläche (kein Build-Schritt, keine externen Abhängigkeiten) unter `http://localhost:8080` — Agent-Aufgaben ausführen, Konversationen laden/löschen, Skills und Plugins anzeigen (siehe [Control-UI](#control-ui)).
@@ -549,6 +549,7 @@ Materialisiert das Konversations-Memory als **menschenlesbare Markdown-Dokumente
 * **Aktivieren:** `jclaw.memory.vault.enabled=true` in `application.properties` oder `openclaw.json`
 * **Verzeichnis:** `jclaw.memory.vault.dir` (Standard: `./vault`) — pro Konversation eine `.md`-Datei mit YAML-Frontmatter (`conversationId`, `title`, `createdAt`, `tags`)
 * **H2 bleibt Quelle der Wahrheit:** Der Vault ist ein idempotenter, lesbarer Auszug — kein Ersatz und kein Dual-Write-Problem
+* **Bidirektionaler Sync (Read-Back):** Ein `MemoryVaultWatcher` überwacht den Vault-Ordner. User-Änderungen an einer `.md`-Datei werden automatisch erkannt und zurück in die gespeicherte Konversation (H2) ingestet — das Markdown-Format (`**ROLLE**\n\ntext`) ist dabei symmetrisch für Schreiben und Lesen
 * **REST-API:** `POST /api/v1/memory/{contextId}/sync` (Konversation als Dokument materialisieren), `GET /api/v1/memory` (alle Vault-Dokumente auflisten)
 
 ### Cron-Jobs (P1-12)

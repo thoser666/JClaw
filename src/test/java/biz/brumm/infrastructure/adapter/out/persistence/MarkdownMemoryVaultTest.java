@@ -1,6 +1,7 @@
 package biz.brumm.infrastructure.adapter.out.persistence;
 
 import biz.brumm.config.MemoryVaultProperties;
+import biz.brumm.domain.model.ConversationMessage;
 import biz.brumm.domain.model.MemoryDocument;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -87,5 +88,53 @@ class MarkdownMemoryVaultTest {
         MarkdownMemoryVault vault = vault(tempDir);
         Files.writeString(tempDir.resolve("note.txt"), "kein markdown");
         assertThat(vault.list()).isEmpty();
+    }
+
+    @Test
+    void renderAndParseMessagesRoundTrip() {
+        List<ConversationMessage> messages = List.of(
+                new ConversationMessage("USER", "Hallo Welt"),
+                new ConversationMessage("ASSISTANT", "Hallo!"));
+        Instant createdAt = Instant.parse("2026-09-03T10:00:00Z");
+        MemoryDocument doc = new MemoryDocument("conv-round", "Titel", createdAt, List.of(),
+                MarkdownMemoryVault.renderMessages(messages));
+
+        List<ConversationMessage> parsed = MarkdownMemoryVault.parseMessages(doc.content());
+
+        assertThat(parsed).hasSize(2);
+        assertThat(parsed.get(0).role()).isEqualTo("USER");
+        assertThat(parsed.get(0).text()).isEqualTo("Hallo Welt");
+        assertThat(parsed.get(1).role()).isEqualTo("ASSISTANT");
+        assertThat(parsed.get(1).text()).isEqualTo("Hallo!");
+    }
+
+    @Test
+    void parseMessagesHandlesMultilineAndNull() {
+        String content = MarkdownMemoryVault.renderMessages(List.of(
+                new ConversationMessage("USER", "Zeile eins\nZeile zwei")));
+
+        List<ConversationMessage> parsed = MarkdownMemoryVault.parseMessages(content);
+        assertThat(parsed).hasSize(1);
+        assertThat(parsed.get(0).text()).isEqualTo("Zeile eins\nZeile zwei");
+        assertThat(MarkdownMemoryVault.parseMessages(null)).isEmpty();
+        assertThat(MarkdownMemoryVault.parseMessages("")).isEmpty();
+    }
+
+    @Test
+    void readDocumentParsesStoredFile() throws Exception {
+        MarkdownMemoryVault vault = vault(tempDir);
+        Instant createdAt = Instant.parse("2026-09-03T10:00:00Z");
+        vault.store(new MemoryDocument("conv-read", "Titel", createdAt, List.of("x"),
+                MarkdownMemoryVault.renderMessages(List.of(
+                        new ConversationMessage("USER", "Hallo")))));
+
+        var read = MarkdownMemoryVault.readDocument(tempDir.resolve("conv-read.md"));
+
+        assertThat(read).isPresent();
+        assertThat(read.get().conversationId()).isEqualTo("conv-read");
+        assertThat(read.get().title()).isEqualTo("Titel");
+        assertThat(read.get().createdAt()).isEqualTo(createdAt);
+        assertThat(MarkdownMemoryVault.parseMessages(read.get().content()))
+                .hasSize(1).first().extracting(ConversationMessage::role).isEqualTo("USER");
     }
 }

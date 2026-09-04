@@ -42,4 +42,21 @@ class ChatMemoryConversationStoreTest {
 
         assertThat(store.findByContextId("ctx-1")).isEmpty();
     }
+
+    @Test
+    void saveAllMapsDomainMessagesBackToSpringAiMessages() {
+        ChatMemoryConversationStore store = new ChatMemoryConversationStore(repository);
+
+        store.saveAll("ctx-2", List.of(
+                new ConversationMessage("SYSTEM", "System"),
+                new ConversationMessage("USER", "Frage"),
+                new ConversationMessage("ASSISTANT", "Antwort"),
+                new ConversationMessage("UNBEKANNT", "Fallback")));
+
+        List<ConversationMessage> read = store.findByContextId("ctx-2");
+        assertThat(read).extracting(ConversationMessage::role)
+                .containsExactly("SYSTEM", "USER", "ASSISTANT", "USER");
+        assertThat(read).extracting(ConversationMessage::text)
+                .containsExactly("System", "Frage", "Antwort", "Fallback");
+    }
 }

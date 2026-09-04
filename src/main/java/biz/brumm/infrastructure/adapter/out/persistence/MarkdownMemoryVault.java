@@ -1,6 +1,7 @@
 package biz.brumm.infrastructure.adapter.out.persistence;
 
 import biz.brumm.config.MemoryVaultProperties;
+import biz.brumm.domain.model.ConversationMessage;
 import biz.brumm.domain.model.MemoryDocument;
 import biz.brumm.domain.port.out.MemoryVaultStore;
 import org.slf4j.Logger;
@@ -18,8 +19,11 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 /**
@@ -64,7 +68,7 @@ public class MarkdownMemoryVault implements MemoryVaultStore {
         List<MemoryDocument> documents = new ArrayList<>();
         try (Stream<Path> stream = Files.list(vaultDir)) {
             for (Path file : stream.filter(p -> p.toString().endsWith(".md")).sorted().toList()) {
-                read(file).ifPresent(documents::add);
+                readDocument(file).ifPresent(documents::add);
             }
         } catch (IOException e) {
             log.warn("Memory-Vault konnte Verzeichnis nicht lesen: {}", e.getMessage());
@@ -72,7 +76,14 @@ public class MarkdownMemoryVault implements MemoryVaultStore {
         return documents;
     }
 
-    private Optional<MemoryDocument> read(Path file) {
+    /**
+     * Liest ein Markdown-Vault-Dokument als {@link MemoryDocument}.
+     * Wird u. a. vom Read-Back/Watcher genutzt, um User-Änderungen zu erfassen.
+     *
+     * @param file zu lesende {@code .md}-Datei
+     * @return das Dokument, oder leer, wenn die Datei nicht lesbar/verarbeitbar ist
+     */
+    public static Optional<MemoryDocument> readDocument(Path file) {
         try {
             String text = Files.readString(file, StandardCharsets.UTF_8);
             Map<String, Object> frontmatter = parseFrontmatter(text);
@@ -87,6 +98,46 @@ public class MarkdownMemoryVault implements MemoryVaultStore {
             log.warn("Memory-Vault konnte {} nicht lesen: {}", file, e.getMessage());
             return Optional.empty();
         }
+    }
+
+    /**
+     * Formatiert eine Konversation als Markdown-Body (je Nachricht
+     * {@code **ROLLE**\n\ntext}). Wird sowohl beim Schreiben als auch beim
+     * Lesen (Read-Back) verwendet, damit das Format symmetrisch bleibt.
+     */
+    public static String renderMessages(List<ConversationMessage> messages) {
+        StringBuilder sb = new StringBuilder();
+        for (ConversationMessage message : messages) {
+            sb.append("**").append(message.role()).append("**\n\n")
+                    .append(message.text() == null ? "" : message.text())
+                    .append("\n\n");
+        }
+        return sb.toString();
+    }
+
+    private static final Pattern MESSAGE_BLOCK = Pattern.compile(
+            "(?m)^\\*\\*(?<role>[A-Z0-9_]+)\\*\\*\\s*\\n\\n(?<text>.*?)(?=\\n\\n\\*\\*[A-Z0-9_]+\\*\\*\\s*\\n|\\z)",
+            Pattern.DOTALL);
+
+    /**
+     * Extrahiert die Konversationsnachrichten aus einem Markdown-Body (Format von
+     * {@link #renderMessages}). Dient dem bidirektionalen Sync von User-Änderungen
+     * im Vault zurück in die Konversation.
+     */
+    public static List<ConversationMessage> parseMessages(String markdownContent) {
+        if (markdownContent == null || markdownContent.isBlank()) {
+            return List.of();
+        }
+        List<ConversationMessage> messages = new ArrayList<>();
+        Matcher matcher = MESSAGE_BLOCK.matcher(markdownContent);
+        while (matcher.find()) {
+            String role = matcher.group("role");
+            String text = matcher.group("text") == null ? "" : matcher.group("text").trim();
+            if (!role.isBlank()) {
+                messages.add(new ConversationMessage(role, text));
+            }
+        }
+        return messages;
     }
 
     static String render(MemoryDocument document) {
@@ -157,7 +208,7 @@ public class MarkdownMemoryVault implements MemoryVaultStore {
         if (value == null || value.isBlank()) {
             return "memory";
         }
-        String slug = value.toLowerCase(java.util.Locale.ROOT)
+        String slug = value.toLowerCase(Locale.ROOT)
                 .replaceAll("[^a-z0-9]+", "-")
                 .replaceAll("^-+|-+$", "");
         return slug.isBlank() ? "memory" : slug;

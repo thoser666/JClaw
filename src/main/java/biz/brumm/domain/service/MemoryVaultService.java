@@ -4,6 +4,7 @@ import biz.brumm.domain.model.ConversationMessage;
 import biz.brumm.domain.model.MemoryDocument;
 import biz.brumm.domain.port.out.ConversationStore;
 import biz.brumm.domain.port.out.MemoryVaultStore;
+import biz.brumm.infrastructure.adapter.out.persistence.MarkdownMemoryVault;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 
@@ -49,7 +50,7 @@ public class MemoryVaultService {
             return false;
         }
         String title = deriveTitle(messages);
-        String content = renderConversation(messages);
+        String content = MarkdownMemoryVault.renderMessages(messages);
         vaultStore.store(new MemoryDocument(contextId, title, Instant.now(), List.of(), content));
         return true;
     }
@@ -69,15 +70,5 @@ public class MemoryVaultService {
             }
         }
         return "Konversation";
-    }
-
-    private String renderConversation(List<ConversationMessage> messages) {
-        StringBuilder sb = new StringBuilder();
-        for (ConversationMessage message : messages) {
-            sb.append("**").append(message.role()).append("**\n\n")
-                    .append(message.text() == null ? "" : message.text())
-                    .append("\n\n");
-        }
-        return sb.toString();
     }
 }
