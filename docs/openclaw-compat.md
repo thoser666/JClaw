@@ -34,6 +34,8 @@ OpenClaw folgt Kalender-Versionierung (`YYYY.M.PATCH`) mit den Kanälen Stable, 
 | Extended-Stable | **2026.6.34** | 08.08.2026 | Wartungslinie (`extended-stable` npm/Container) |
 | Beta | **2026.8.1-beta.2** | 15.08.2026 | Neue Features, aber **Full Release Validation fehlgeschlagen → nicht promotion-ready** |
 
+> **Versions-Monitor:** Seit 2026-09-04 überwacht der GitHub-Workflow `.github/workflows/openclaw-monitor.yml` wöchentlich neue OpenClaw-Versionen und Community-Feature-Requests (siehe README "OpenClaw-Versionsmonitor"). Die obige Tabelle + die Referenz-Zeile im Header werden über die daraus erzeugten Triage-Issues aktuell gehalten (erster Lauf erkennt u. a. die seit August neuere Stable-Linie 2026.9.x).
+
 Für die JClaw-Parität relevante Änderungen seit der Erstanlage (2026-08-08):
 
 - **Session-first Control-UI (2026.7.1):** Sessions sind die primäre Navigations-Einheit — durchsuchbare Session-Liste, **Session-Gruppen**, **generierte Titel**, **Transcript-Export**, Anzeige von Kontext-Verbrauch sowie Modell-/Thinking-Steuerung je Session. → betrifft P1-09 (Session-Konzept) und die Session-Steuerung der JClaw-UI (P2-04).

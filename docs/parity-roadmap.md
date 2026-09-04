@@ -2,6 +2,8 @@
 
 Stand: 2026-09-02 · Basis: `docs/openclaw-compat.md` (Formatanalyse) · Referenz-Version: OpenClaw **2026.7.1** (Stable) / **2026.8.2** (aktuelle Linie, 01.09.2026) · Ziel: **100 % Parität** zu OpenClaw.
 
+> **Automatischer Versions-Monitor:** Seit 2026-09-04 überwacht der GitHub-Workflow `.github/workflows/openclaw-monitor.yml` wöchentlich neue OpenClaw-Versionen und Community-Feature-Requests und legt bei Neuigkeiten ein Triage-Issue an (Release-/Community-Scan + Vision-Checkliste). Die zuletzt geprüfte Version liegt in `.github/state/openclaw-last-checked.txt`. Die manuelle "Referenz-Version"-Zeile oben wird über diesen Check aktuell gehalten (der erste Lauf erkennt z. B. die seit August neuere OpenClaw-Linie **2026.9.x**).
+
 ## Status-Legende
 
 | Symbol | Bedeutung |
@@ -216,3 +218,4 @@ Ein Baustein gilt als paritätisch, wenn:
 2. **P4-01** Node-Sidecar-Plugin-Laufzeit — gegen den aktuellen Plugin-SDK-Stand (Subpath-Imports, moderne Hook-Stages), mit **P4-09** Security-Maßnahmen.
 3. **P4-07/P4-08** Automations-Erweiterungen aus OpenClaw 2026.8.x (Goals & Queues, Background-Sessions).
 4. **P4-11–P4-14** Browser-/Talk-/Voice-Features — Referenz OpenClaw 2026.8.2 (Browser-Steuerung ohne Gateway, Realtime-Talk, TTS-Personas).
+5. **Versions-Monitor-Triage:** Vom wöchentlichen OpenClaw-Monitor erzeugte Issues regelmäßig durchgehen (neue Stable-Linie **2026.9.x**, neue Features/Community-Wünsche) und gegen die oben stehenden Referenz-Versionen + P-Items aktualisieren — siehe README "OpenClaw-Versionsmonitor".

@@ -1,0 +1,86 @@
+name: "OpenClaw Monitor (wöchentlich)"
+
+# Prüft wöchentlich (und manuell per workflow_dispatch) auf neue OpenClaw-Versionen
+# und Community-Feature-Requests, bewertet deren Relevanz für die JClaw-Vision
+# und legt bei Neuigkeiten ein GitHub-Issue an. Die zuletzt geprüfte Version wird
+# in .github/state/openclaw-last-checked.txt persistiert (auto-commit).
+on:
+  schedule:
+    # Jeden Montag 08:00 UTC
+    - cron: "0 8 * * 1"
+  workflow_dispatch:
+    inputs:
+      scan_days:
+        description: "Community-Scan-Fenster in Tagen"
+        required: false
+        default: "7"
+        type: number
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v5
+
+    # gh + jq + curl sind auf ubuntu-latest vorinstalliert.
+
+    - name: Run OpenClaw monitor script
+      id: monitor
+      env:
+        GH_TOKEN: "${{ github.token }}"
+        UPSTREAM: "openclaw/openclaw"
+        STATE_FILE: ".github/state/openclaw-last-checked.txt"
+        SCAN_DAYS: "${{ inputs.scan_days || '7' }}"
+      run: |
+        bash .github/scripts/openclaw-monitor.sh | tee /tmp/openclaw-monitor.log
+        # NEWS_DETECTED / TITLE / BODY_FILE aus der letzten Zeilenausgabe übernehmen
+        NEWS_DETECTED="$(grep -E '^NEWS_DETECTED=' /tmp/openclaw-monitor.log | tail -1 | cut -d= -f2)"
+        TITLE="$(grep -E '^TITLE=' /tmp/openclaw-monitor.log | tail -1 | cut -d= -f2-)"
+        BODY_FILE="$(grep -E '^BODY_FILE=' /tmp/openclaw-monitor.log | tail -1 | cut -d= -f2-)"
+        echo "NEWS_DETECTED=$NEWS_DETECTED" >> "$GITHUB_OUTPUT"
+        echo "TITLE=$TITLE" >> "$GITHUB_OUTPUT"
+        echo "BODY_FILE=$BODY_FILE" >> "$GITHUB_OUTPUT"
+
+    # Nur bei tatsächlichen Neuigkeiten ein Issue anlegen (verhindert Spam).
+    - name: Create / update tracking issue
+      if: steps.monitor.outputs.NEWS_DETECTED == '1'
+      env:
+        GH_TOKEN: "${{ github.token }}"
+        TITLE: "${{ steps.monitor.outputs.TITLE }}"
+        BODY_FILE: "${{ steps.monitor.outputs.BODY_FILE }}"
+      run: |
+        # Label sicherstellen (gh legt fehlende Labels nicht automatisch an)
+        gh label create "openclaw-monitor" --description "Release-/Community-Check vom OpenClaw-Versionsmonitor" --color "5319e7" 2>/dev/null || true
+        # Bestehendes offenes Check-Issue finden und schließen
+        EXISTING="$(
+          gh issue list --state open --search "in:title \"OpenClaw\" \"Community-Check\"" \
+            --json number,title --jq '.[0].number' 2>/dev/null || true
+        )"
+        if [ -n "$EXISTING" ]; then
+          gh issue close "$EXISTING" --reason completed
+        fi
+        gh issue create \
+          --title "$TITLE" \
+          --body-file "$BODY_FILE" \
+          --label "openclaw-monitor"
+
+    # STATE-Datei (zuletzt geprüfte Version) committen, falls geändert.
+    - name: Commit updated state
+      env:
+        GH_TOKEN: "${{ github.token }}"
+      run: |
+        git config user.name "github-actions[bot]"
+        git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+        git add .github/state/openclaw-last-checked.txt
+        if ! git diff --cached --quiet; then
+          git commit -m "chore(monitor): OpenClaw-Versionsstand aktualisieren"
+          git push
+        else
+          echo "STATE unverändert – kein Commit nötig."
+        fi

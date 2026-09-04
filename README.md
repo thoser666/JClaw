@@ -654,6 +654,16 @@ Der `WhatsAppChannelAdapter` verbindet JClaw mit WhatsApp über die **Meta Whats
 * **Empfangen:** push-basiert über den **Meta-Webhook** — Meta liefert Nachrichten per Webhook an deine URL (z. B. in den vorhandenen `POST /api/v1/channels/{id}/inbound`-Endpoint). Der Adapter liefert `verifyWebhook()` (Hub-Challenge-Handshake für den GET-Gegencheck) und `inboundFromWebhook()` (Parsen des Meta-Payloads in eine eingehende Nachricht)
 * **Verfügbarkeit:** `isAvailable()` liefert `true`, wenn der Channel aktiv ist und `token` sowie `phoneNumberId` gesetzt sind
 
+## OpenClaw-Versionsmonitor
+
+Ein **wöchentlicher GitHub-Workflow** (`.github/workflows/openclaw-monitor.yml`) hält JClaw über neue OpenClaw-Versionen und Community-Feature-Wünsche auf dem Laufenden und prüft sie automatisch gegen die JClaw-Vision (100 % Parität — zuletzt geprüfte Version in `.github/state/openclaw-last-checked.txt`):
+
+* **Release-Scan:** Vergleicht die neueste stabile OpenClaw-Version (`openclaw/openclaw` Releases) mit der zuletzt geprüften Version.
+* **Community-Scan:** Durchsucht OpenClaw-Issues/PRs der letzten 7 Tage nach neuen Feature-Requests (Labels `feature`/`enhancement`/`rfc`).
+* **Triage-Issue:** Bei Neuigkeiten legt der Workflow automatisch ein GitHub-Issue an — mit Zusammenfassung neuer Features/Wünsche und einer **Checkliste zum Abgleich gegen die JClaw-Vision** (Relevanz → Roadmap-Einordnung → Differenzierung → Priorisierung). Er trifft keine Roadmap-Entscheidung selbst, sondern erzeugt einen Triage-Anreiz.
+
+Ausführung: jeden Montag 08:00 UTC sowie manuell über den Workflow-Tab (parameter `scan_days`). Der Workflow committet die STATE-Datei nach jedem Lauf, sodass er nur bei echten Neuigkeiten feuert.
+
 ## Tests
 
 ```bash
