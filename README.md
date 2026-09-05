@@ -654,6 +654,28 @@ Der `WhatsAppChannelAdapter` verbindet JClaw mit WhatsApp über die **Meta Whats
 * **Empfangen:** push-basiert über den **Meta-Webhook** — Meta liefert Nachrichten per Webhook an deine URL (z. B. in den vorhandenen `POST /api/v1/channels/{id}/inbound`-Endpoint). Der Adapter liefert `verifyWebhook()` (Hub-Challenge-Handshake für den GET-Gegencheck) und `inboundFromWebhook()` (Parsen des Meta-Payloads in eine eingehende Nachricht)
 * **Verfügbarkeit:** `isAvailable()` liefert `true`, wenn der Channel aktiv ist und `token` sowie `phoneNumberId` gesetzt sind
 
+#### IRC (P3-06)
+
+Der `IrcChannelAdapter` verbindet JClaw über eine **direkte TCP-Verbindung** mit einem IRC-Server:
+
+* **Aktivieren:** Channel mit `type: IRC` und folgender Konfiguration erstellen:
+  ```json5
+  {
+    "name": "Mein IRC Bot",
+    "type": "IRC",
+    "config": {
+      "server": "irc.example.org",      // Pflicht – IRC-Server-Hostname
+      "port": 6667,                     // optional, Standard 6667
+      "nick": "jclaw",                  // optional, Standard "jclaw"
+      "channel": "#general",            // optional, Standard "#general"; fehlendes #/&-Präfix wird ergänzt
+      "nickservPassword": "<PASSWORD>"  // optional – wird als PRIVMSG NickServ :IDENTIFY gesendet
+    }
+  }
+  ```
+* **Senden:** `POST /api/v1/channels/{id}/send` — `PRIVMSG <target> :<text>`; `target` wird aus `threadId` bzw. `senderId` aufgelöst
+* **Empfangen:** `startReceiving` verbindet per TCP-Socket, sendet `NICK`/`USER`/`JOIN` und liest in einem Daemon-Thread eingehende `PRIVMSG`-Zeilen (andere Zeilen wie `PING` oder numerische Replies werden ignoriert)
+* **Verfügbarkeit:** `isAvailable()` liefert `true`, wenn der Channel aktiv ist und ein `server` gesetzt ist
+
 ## OpenClaw-Versionsmonitor
 
 Ein **wöchentlicher GitHub-Workflow** (`.github/workflows/openclaw-monitor.yml`) hält JClaw über neue OpenClaw-Versionen und Community-Feature-Wünsche auf dem Laufenden und prüft sie automatisch gegen die JClaw-Vision (100 % Parität — zuletzt geprüfte Version in `.github/state/openclaw-last-checked.txt`):
