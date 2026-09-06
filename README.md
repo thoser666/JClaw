@@ -676,6 +676,33 @@ Der `IrcChannelAdapter` verbindet JClaw über eine **direkte TCP-Verbindung** mi
 * **Empfangen:** `startReceiving` verbindet per TCP-Socket, sendet `NICK`/`USER`/`JOIN` und liest in einem Daemon-Thread eingehende `PRIVMSG`-Zeilen (andere Zeilen wie `PING` oder numerische Replies werden ignoriert)
 * **Verfügbarkeit:** `isAvailable()` liefert `true`, wenn der Channel aktiv ist und ein `server` gesetzt ist
 
+#### E-Mail (P3-06)
+
+Der `EmailChannelAdapter` verbindet JClaw über **SMTP** (Senden) und **IMAP** (Empfang) mit einem Mail-Server:
+
+* **Aktivieren:** Channel mit `type: EMAIL` und folgender Konfiguration erstellen:
+  ```json5
+  {
+    "name": "Mein Mail Bot",
+    "type": "EMAIL",
+    "config": {
+      "server": "mail.example.org",      // Pflicht – SMTP- und IMAP-Host
+      "username": "jclaw@example.org",   // Pflicht – Login
+      "password": "<PASSWORD>",          // Pflicht
+      "from": "jclaw@example.org",       // optional, Standard: username
+      "smtpPort": 587,                   // optional, Standard 25
+      "imapPort": 143,                   // optional, Standard 143
+      "imapFolder": "INBOX",             // optional, Standard "INBOX"
+      "pollIntervalSeconds": 30,         // optional, Standard 30
+      "subject": "JClaw",                // optional, Betreff für ausgehende Nachrichten
+      "useTls": false                    // optional, Implicit-TLS (SSLSocket)
+    }
+  }
+  ```
+* **Senden:** `POST /api/v1/channels/{id}/send` — SMTP-Dialog (`EHLO`/`MAIL FROM`/`RCPT TO`/`DATA` mit From/To/Subject/Date, Dot-Stuffing, `QUIT`); Empfänger wird aus `threadId` bzw. `senderId` aufgelöst
+* **Empfangen:** `startReceiving` pollt per IMAP (`LOGIN`/`SELECT`/`UID SEARCH UNSEEN`/`UID FETCH (RFC822)`/`UID STORE +FLAGS (\Seen)`) in einem Daemon-Thread und parsed eingehende Nachrichten mit Jakarta Mail (text/plain bevorzugt, HTML-Fallback)
+* **Verfügbarkeit:** `isAvailable()` liefert `true`, wenn der Channel aktiv ist und `server`, `username` sowie `password` gesetzt sind
+
 ## OpenClaw-Versionsmonitor
 
 Ein **wöchentlicher GitHub-Workflow** (`.github/workflows/openclaw-monitor.yml`) hält JClaw über neue OpenClaw-Versionen und Community-Feature-Wünsche auf dem Laufenden und prüft sie automatisch gegen die JClaw-Vision (100 % Parität — zuletzt geprüfte Version in `.github/state/openclaw-last-checked.txt`):
