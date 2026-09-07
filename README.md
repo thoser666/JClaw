@@ -703,6 +703,27 @@ Der `EmailChannelAdapter` verbindet JClaw über **SMTP** (Senden) und **IMAP** (
 * **Empfangen:** `startReceiving` pollt per IMAP (`LOGIN`/`SELECT`/`UID SEARCH UNSEEN`/`UID FETCH (RFC822)`/`UID STORE +FLAGS (\Seen)`) in einem Daemon-Thread und parsed eingehende Nachrichten mit Jakarta Mail (text/plain bevorzugt, HTML-Fallback)
 * **Verfügbarkeit:** `isAvailable()` liefert `true`, wenn der Channel aktiv ist und `server`, `username` sowie `password` gesetzt sind
 
+#### Mattermost (P3-06)
+
+Der `MattermostChannelAdapter` verbindet JClaw über **Webhooks** mit Mattermost — Senden über einen Incoming Webhook, Empfang push-basiert über einen Outgoing Webhook:
+
+* **Aktivieren:** Channel mit `type: MATTERMOST` und folgender Konfiguration erstellen:
+  ```json5
+  {
+    "name": "Mein Mattermost Bot",
+    "type": "MATTERMOST",
+    "config": {
+      "incomingWebhookUrl": "https://mm.example.org/hooks/abc123", // Pflicht – Incoming-Webhook-URL (Senden)
+      "outgoingWebhookToken": "mm-token", // optional – Token des Outgoing-Webhooks (Empfangs-Verifikation)
+      "channel": "town-square",           // optional – Channel-Override im Payload
+      "username": "jclaw"                 // optional – Anzeigename des Bots
+    }
+  }
+  ```
+* **Senden:** `POST /api/v1/channels/{id}/send` — `POST` des JSON-Payloads `{"channel":…,"username":…,"text":…}` an den Incoming Webhook; Ziel aus `threadId` bzw. `senderId` (ohne Ziel übernimmt der Webhook seinen Default-Channel)
+* **Empfangen (push-basiert):** Der Mattermost-Outgoing-Webhook `POST`et an JClaw; `verifyWebhook()` prüft den `token` gegen `outgoingWebhookToken` (ohne konfigurierten Token werden Pushes akzeptiert), `inboundFromWebhook()` parsed den Payload (`user_id`→senderId, `channel_id`→threadId, `post_id`→externalId) und entfernt ein gesetztes `trigger_word` aus dem Text
+* **Verfügbarkeit:** `isAvailable()` liefert `true`, wenn der Channel aktiv ist und `incomingWebhookUrl` gesetzt ist
+
 ## OpenClaw-Versionsmonitor
 
 Ein **wöchentlicher GitHub-Workflow** (`.github/workflows/openclaw-monitor.yml`) hält JClaw über neue OpenClaw-Versionen und Community-Feature-Wünsche auf dem Laufenden und prüft sie automatisch gegen die JClaw-Vision (100 % Parität — zuletzt geprüfte Version in `.github/state/openclaw-last-checked.txt`):
