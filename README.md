@@ -724,6 +724,25 @@ Der `MattermostChannelAdapter` verbindet JClaw über **Webhooks** mit Mattermost
 * **Empfangen (push-basiert):** Der Mattermost-Outgoing-Webhook `POST`et an JClaw; `verifyWebhook()` prüft den `token` gegen `outgoingWebhookToken` (ohne konfigurierten Token werden Pushes akzeptiert), `inboundFromWebhook()` parsed den Payload (`user_id`→senderId, `channel_id`→threadId, `post_id`→externalId) und entfernt ein gesetztes `trigger_word` aus dem Text
 * **Verfügbarkeit:** `isAvailable()` liefert `true`, wenn der Channel aktiv ist und `incomingWebhookUrl` gesetzt ist
 
+#### Google Chat (P3-06)
+
+Der `GoogleChatChannelAdapter` verbindet JClaw über **Webhooks** mit Google Chat — Senden über einen Incoming Webhook, Empfang push-basiert über Ereignis-Webhooks:
+
+* **Aktivieren:** Channel mit `type: GOOGLE_CHAT` und folgender Konfiguration erstellen:
+  ```json5
+  {
+    "name": "Mein Google Chat Bot",
+    "type": "GOOGLE_CHAT",
+    "config": {
+      "webhookUrl": "https://chat.googleapis.com/v1/spaces/AAA/messages?key=...&token=..", // Pflicht – Incoming-Webhook-URL (Senden)
+      "verifyToken": "gc-token" // optional – Token für die Empfangs-Verifikation
+    }
+  }
+  ```
+* **Senden:** `POST /api/v1/channels/{id}/send` — `POST` des JSON-Payloads `{"text": "..."}` an den Incoming Webhook; die erzeugte Nachricht (`name` = `spaces/.../messages/...`) wird als `externalId` übernommen
+* **Empfangen (push-basiert):** Google-Chat-Ereignis-Webhooks (Bot-Erwähnungen) `POST`en an JClaw; `verifyWebhook()` prüft den Token gegen `verifyToken` (ohne konfigurierten Token werden Pushes akzeptiert), `inboundFromWebhook()` parsed den Payload (`argumentText`→content mit Erwähnungs-Stripping, `sender.name`→senderId, `space.name`→threadId, `message.name`→externalId)
+* **Verfügbarkeit:** `isAvailable()` liefert `true`, wenn der Channel aktiv ist und `webhookUrl` gesetzt ist
+
 ## OpenClaw-Versionsmonitor
 
 Ein **wöchentlicher GitHub-Workflow** (`.github/workflows/openclaw-monitor.yml`) hält JClaw über neue OpenClaw-Versionen und Community-Feature-Wünsche auf dem Laufenden und prüft sie automatisch gegen die JClaw-Vision (100 % Parität — zuletzt geprüfte Version in `.github/state/openclaw-last-checked.txt`):
