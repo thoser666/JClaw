@@ -743,6 +743,25 @@ Der `GoogleChatChannelAdapter` verbindet JClaw über **Webhooks** mit Google Cha
 * **Empfangen (push-basiert):** Google-Chat-Ereignis-Webhooks (Bot-Erwähnungen) `POST`en an JClaw; `verifyWebhook()` prüft den Token gegen `verifyToken` (ohne konfigurierten Token werden Pushes akzeptiert), `inboundFromWebhook()` parsed den Payload (`argumentText`→content mit Erwähnungs-Stripping, `sender.name`→senderId, `space.name`→threadId, `message.name`→externalId)
 * **Verfügbarkeit:** `isAvailable()` liefert `true`, wenn der Channel aktiv ist und `webhookUrl` gesetzt ist
 
+#### Feishu (P3-06)
+
+Der `FeishuChannelAdapter` verbindet JClaw über **Webhooks** mit Feishu (Lark) — Senden über einen Incoming Webhook, Empfang push-basiert über die Event Subscription:
+
+* **Aktivieren:** Channel mit `type: FEISHU` und folgender Konfiguration erstellen:
+  ```json5
+  {
+    "name": "Mein Feishu Bot",
+    "type": "FEISHU",
+    "config": {
+      "webhookUrl": "https://open.feishu.cn/open-apis/bot/v2/hook/abc123", // Pflicht – Incoming-Webhook-URL (Senden)
+      "verifyToken": "fs-token" // optional – Token für die Empfangs-Verifikation
+    }
+  }
+  ```
+* **Senden:** `POST /api/v1/channels/{id}/send` — `POST` des JSON-Payloads `{"msg_type":"text","content":{"text":"..."}}` an den Incoming Webhook; die erzeugte Nachricht (`data.message_id`) wird bei `code==0` als `externalId` übernommen
+* **Empfangen (push-basiert):** Die Feishu-Event-Subscription (`event_callback`) `POST`et an JClaw; `verifyWebhook()` prüft den Token gegen `verifyToken` (ohne konfigurierten Token werden Pushes akzeptiert), `inboundFromWebhook()` parsed Text-Events (`message_type=="text"` → `content.text`, `sender.sender_id.user_id`→senderId, `message.chat_id`→threadId, `message.message_id`→externalId)
+* **Verfügbarkeit:** `isAvailable()` liefert `true`, wenn der Channel aktiv ist und `webhookUrl` gesetzt ist
+
 ## OpenClaw-Versionsmonitor
 
 Ein **wöchentlicher GitHub-Workflow** (`.github/workflows/openclaw-monitor.yml`) hält JClaw über neue OpenClaw-Versionen und Community-Feature-Wünsche auf dem Laufenden und prüft sie automatisch gegen die JClaw-Vision (100 % Parität — zuletzt geprüfte Version in `.github/state/openclaw-last-checked.txt`):
