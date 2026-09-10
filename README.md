@@ -762,6 +762,26 @@ Der `FeishuChannelAdapter` verbindet JClaw über **Webhooks** mit Feishu (Lark) 
 * **Empfangen (push-basiert):** Die Feishu-Event-Subscription (`event_callback`) `POST`et an JClaw; `verifyWebhook()` prüft den Token gegen `verifyToken` (ohne konfigurierten Token werden Pushes akzeptiert), `inboundFromWebhook()` parsed Text-Events (`message_type=="text"` → `content.text`, `sender.sender_id.user_id`→senderId, `message.chat_id`→threadId, `message.message_id`→externalId)
 * **Verfügbarkeit:** `isAvailable()` liefert `true`, wenn der Channel aktiv ist und `webhookUrl` gesetzt ist
 
+#### Synology Chat (P3-06)
+
+Der `SynologyChatChannelAdapter` verbindet JClaw über **Webhooks** mit Synology Chat — Senden über einen Incoming Webhook, Empfang push-basiert über einen Outgoing Webhook:
+
+* **Aktivieren:** Channel mit `type: SYNOSOLOGY_CHAT` und folgender Konfiguration erstellen:
+  ```json5
+  {
+    "name": "Mein Synology Chat Bot",
+    "type": "SYNOSOLOGY_CHAT",
+    "config": {
+      "incomingWebhookUrl": "https://synology:5000/webhook/abc123", // Pflicht – Incoming-Webhook-URL (Senden)
+      "outgoingWebhookToken": "sc-token", // optional – Token des Outgoing-Webhooks (Empfangs-Verifikation)
+      "channel": "#general"                // optional – Standard-Channel-Override
+    }
+  }
+  ```
+* **Senden:** `POST /api/v1/channels/{id}/send` — `POST` des JSON-Payloads `{"text":"...","channel_name":"..."}` an den Incoming Webhook; Ziel aus `threadId`/`senderId` mit Fallback auf den konfigurierten `channel`
+* **Empfangen (push-basiert):** Der Synology-Outgoing-Webhook `POST`et an JClaw; `verifyWebhook()` prüft den `token` gegen `outgoingWebhookToken` (ohne konfigurierten Token werden Pushes akzeptiert), `inboundFromWebhook()` parsed den Payload (`user_id`→senderId, `channel_id`→threadId mit Fallback auf `channel_name`, `post_id`→externalId)
+* **Verfügbarkeit:** `isAvailable()` liefert `true`, wenn der Channel aktiv ist und `incomingWebhookUrl` gesetzt ist
+
 ## OpenClaw-Versionsmonitor
 
 Ein **wöchentlicher GitHub-Workflow** (`.github/workflows/openclaw-monitor.yml`) hält JClaw über neue OpenClaw-Versionen und Community-Feature-Wünsche auf dem Laufenden und prüft sie automatisch gegen die JClaw-Vision (100 % Parität — zuletzt geprüfte Version in `.github/state/openclaw-last-checked.txt`):

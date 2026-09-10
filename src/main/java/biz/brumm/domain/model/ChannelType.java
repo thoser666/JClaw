@@ -14,6 +14,7 @@ public enum ChannelType {
     IRC,
     GOOGLE_CHAT,
     MATTERMOST,
+    SYNOSOLOGY_CHAT,
     FEISHU,
     BUZZ,
     CLICKCLACK,
