@@ -782,6 +782,26 @@ Der `SynologyChatChannelAdapter` verbindet JClaw über **Webhooks** mit Synology
 * **Empfangen (push-basiert):** Der Synology-Outgoing-Webhook `POST`et an JClaw; `verifyWebhook()` prüft den `token` gegen `outgoingWebhookToken` (ohne konfigurierten Token werden Pushes akzeptiert), `inboundFromWebhook()` parsed den Payload (`user_id`→senderId, `channel_id`→threadId mit Fallback auf `channel_name`, `post_id`→externalId)
 * **Verfügbarkeit:** `isAvailable()` liefert `true`, wenn der Channel aktiv ist und `incomingWebhookUrl` gesetzt ist
 
+#### X / Twitter Direct Messages (P3-06)
+
+Der `XChannelAdapter` verbindet JClaw über die **X-API-v2-DM-Endpunkte** mit X (Twitter) Direct Messages — Senden per REST, Empfang per DM-Polling:
+
+* **Aktivieren:** Channel mit `type: X` und folgender Konfiguration erstellen:
+  ```json5
+  {
+    "name": "Mein X Bot",
+    "type": "X",
+    "config": {
+      "token": "<OAUTH2_USER_CONTEXT_TOKEN>", // Pflicht – User-Context-Token des Bot-Kontos
+      "baseUrl": "https://api.x.com/2",        // optional – API-Basis-URL
+      "pollIntervalSeconds": 30               // optional – aktualisieren der DMs, Standard 30
+    }
+  }
+  ```
+* **Senden:** `POST /api/v1/channels/{id}/send` — `POST /dm_conversations/with/{participantId}/messages` mit `Authorization: Bearer <token>` und `{"text":"..."}`; Teilnehmer aus `threadId`/`senderId`, die erzeugte Nachricht (`data.id`) wird als `externalId` übernommen
+* **Empfangen:** `startReceiving` pollt `GET /dm_events` in einem Daemon-Thread; `MessageCreate`-Events werden chronologisch (älteste zuerst) geliefert und über die Event-Ids dedupliziert (`sender_id`→senderId, `dm_conversation_id`→threadId, Event-`id`→externalId)
+* **Verfügbarkeit:** `isAvailable()` liefert `true`, wenn der Channel aktiv ist und `token` gesetzt ist
+
 ## OpenClaw-Versionsmonitor
 
 Ein **wöchentlicher GitHub-Workflow** (`.github/workflows/openclaw-monitor.yml`) hält JClaw über neue OpenClaw-Versionen und Community-Feature-Wünsche auf dem Laufenden und prüft sie automatisch gegen die JClaw-Vision (100 % Parität — zuletzt geprüfte Version in `.github/state/openclaw-last-checked.txt`):
