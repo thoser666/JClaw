@@ -74,3 +74,18 @@ CREATE TABLE IF NOT EXISTS channel_message (
 
 CREATE INDEX IF NOT EXISTS idx_channel_message_session ON channel_message(session_id);
 CREATE INDEX IF NOT EXISTS idx_channel_message_channel ON channel_message(channel_id);
+
+CREATE TABLE IF NOT EXISTS channel_ingress (
+    channel_id VARCHAR(255) PRIMARY KEY,
+    last_item_id VARCHAR(255),
+    updated_at TIMESTAMP NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS channel_ingress_item (
+    channel_id VARCHAR(255) NOT NULL,
+    item_id VARCHAR(255) NOT NULL,
+    seen_at TIMESTAMP NOT NULL,
+    PRIMARY KEY (channel_id, item_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_channel_ingress_item_seen ON channel_ingress_item(channel_id, seen_at);
