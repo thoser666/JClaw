@@ -802,6 +802,28 @@ Der `XChannelAdapter` verbindet JClaw über die **X-API-v2-DM-Endpunkte** mit X 
 * **Empfangen:** `startReceiving` pollt `GET /dm_events` in einem Daemon-Thread; `MessageCreate`-Events werden chronologisch (älteste zuerst) geliefert und über die Event-Ids dedupliziert (`sender_id`→senderId, `dm_conversation_id`→threadId, Event-`id`→externalId)
 * **Verfügbarkeit:** `isAvailable()` liefert `true`, wenn der Channel aktiv ist und `token` gesetzt ist
 
+#### ClickClack (P3-06)
+
+Der `ClickClackChannelAdapter` verbindet JClaw über die **ClickClack-REST-API** (Bot-User) mit ClickClack — Senden per REST, Empfang per Polling der Real-Time-Events über die Ingress-Monitor-Abstraktion (P3-08):
+
+* **Aktivieren:** Channel mit `type: CLICKCLACK` und folgender Konfiguration erstellen:
+  ```json5
+  {
+    "name": "Mein ClickClack Bot",
+    "type": "CLICKCLACK",
+    "config": {
+      "token": "ccb_...",               // Pflicht – Bot-Token (Bearer)
+      "workspace": "default",           // Pflicht – Workspace-Name oder -Slug
+      "baseUrl": "https://your.clickclack.app", // Pflicht – Host
+      "pollIntervalSeconds": 30,        // optional – Poll-Intervall der Real-Time-Events, Standard 30
+      "defaultTo": "channel:general"    // optional – Standard-Ziel, wenn threadId/senderId fehlen
+    }
+  }
+  ```
+* **Senden:** `POST /api/v1/channels/{id}/send` — REST-Aufrufe mit `Authorization: Bearer <token>`; Ziel aus `threadId` → `senderId` → `defaultTo`, Normalisierung `channel:`/`dm:`/`thread:` (ohne Präfix = Channel); Channels und DMs werden über die Workspace-Id (`GET /api/workspaces` → `GET /api/workspaces/{id}/channels`, `GET /api/dms`/`POST /api/dms`) aufgelöst und gecacht; Nachrichten über `POST /api/channels/{id}/messages` bzw. `POST /api/dms/{id}/messages` (bzw. `thread/replies` für Thread-Antworten); die erzeugte Nachricht (`message.id`) wird als `externalId` übernommen
+* **Empfangen:** `startReceiving` pollt fortlaufend `GET /api/realtime/events` über den `ChannelIngressMonitor` (durable, dedupliziert über die Store-Items, s. u.); der erste Lauf bootstrappt per `include_tail=true` direkt auf den `tail_cursor` (keine Historie), danach werden `message.created`/`thread.reply_created`-Events verarbeitet — die Nachricht wird per `GET /api/messages/{id}` geholt, eigene Bot-Nachrichten (`author_id` = Bot-User-Id aus `GET /api/me`) werden übersprungen; schlägt der Nachrichten-Abruf fehl, bleibt der Cursor für den nächsten Poll stehen
+* **Verfügbarkeit:** `isAvailable()` liefert `true`, wenn der Channel aktiv ist und `token`, `workspace` sowie `baseUrl` gesetzt sind
+
 ## OpenClaw-Versionsmonitor
 
 Ein **wöchentlicher GitHub-Workflow** (`.github/workflows/openclaw-monitor.yml`) hält JClaw über neue OpenClaw-Versionen und Community-Feature-Wünsche auf dem Laufenden und prüft sie automatisch gegen die JClaw-Vision (100 % Parität — zuletzt geprüfte Version in `.github/state/openclaw-last-checked.txt`):
