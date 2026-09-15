@@ -824,6 +824,30 @@ Der `ClickClackChannelAdapter` verbindet JClaw über die **ClickClack-REST-API**
 * **Empfangen:** `startReceiving` pollt fortlaufend `GET /api/realtime/events` über den `ChannelIngressMonitor` (durable, dedupliziert über die Store-Items, s. u.); der erste Lauf bootstrappt per `include_tail=true` direkt auf den `tail_cursor` (keine Historie), danach werden `message.created`/`thread.reply_created`-Events verarbeitet — die Nachricht wird per `GET /api/messages/{id}` geholt, eigene Bot-Nachrichten (`author_id` = Bot-User-Id aus `GET /api/me`) werden übersprungen; schlägt der Nachrichten-Abruf fehl, bleibt der Cursor für den nächsten Poll stehen
 * **Verfügbarkeit:** `isAvailable()` liefert `true`, wenn der Channel aktiv ist und `token`, `workspace` sowie `baseUrl` gesetzt sind
 
+#### Buzz (Nostr) (P3-06)
+
+Der `BuzzChannelAdapter` verbindet JClaw über ein **NIP-01-WebSocket** direkt mit einem **Buzz-Relay** (NIP-29-Gruppen) — Senden und Empfang per signierter Nostr-Events, Empfang über die Ingress-Monitor-Abstraktion (P3-08):
+
+* **Aktivieren:** Channel mit `type: BUZZ` und folgender Konfiguration erstellen:
+  ```json5
+  {
+    "name": "Mein Buzz Bot",
+    "type": "BUZZ",
+    "config": {
+      "relay": "wss://relay.example.com",     // Pflicht – Relay-WebSocket-URL
+      "privateKey": "<64-Hex>",               // Pflicht – privater Nostr-Schlüssel des Bots
+      "defaultTo": "<Raum-UUID>",             // Pflicht – Buzz-Raum (UUID), in dem der Bot lauscht
+      "pollIntervalSeconds": 30,              // optional – Poll-Intervall, Standard 30
+      "relayTimeoutSeconds": 10               // optional – Timeout für Relay-Antworten, Standard 10
+    }
+  }
+  ```
+* **Senden:** `POST /api/v1/channels/{id}/send` — veröffentlicht ein NIP-01-Event (kind 9) mit `h`-Tag (Raum-UUID) am Relay; Ziel aus `threadId` → `defaultTo` mit den Formaten `buzz:<raum>`, `room:<raum>`, `<raum>` (kanonisch ausgehend: `buzz:room:<raum>`); Thread-Antworten über `buzz:thread:<raum>:<root-event-id>` (NIP-10-`e`-Tag mit `reply`-Marker); Event-`id` als `externalId`, Signaturen BIP-340-Schnorr (secp256k1) über die Event-Id
+* **Empfangen:** `startReceiving` pollt über den `ChannelIngressMonitor` (durable, dedupliziert über die Store-Items) eine NIP-01-Subscription (`REQ` mit `{"kinds":[9],"#h":[raum],"since":…}`); der erste Lauf bootstrappt nur den Zeit-Cursor (kein History-Replay), danach werden neue Events chronologisch übernommen, eigene Nachrichten (Selbst-Filter über die eigene Pubkey) übersprungen; durable Cursor = `externalId` `"<created_at>:<event-id>"`, Room-`threadId` = `buzz:room:<raum>`, Thread-Replies (NIP-10-`e`-Tag) = `buzz:thread:<raum>:<root>`
+* **NIP-42:** Fordert das Relay eine `AUTH`-Challenge, signiert der Adapter automatisch ein kind-22242-Event (`relay`- und `challenge`-Tags) und wiederholt die Operation
+* **Verfügbarkeit:** `isAvailable()` liefert `true`, wenn der Channel aktiv ist und `relay` sowie `privateKey` gesetzt sind
+* **Dependency:** Neuerdings **BouncyCastle** (secp256k1/BIP-340) — die übrigen Channel-Adapter bleiben dependency-frei
+
 ## OpenClaw-Versionsmonitor
 
 Ein **wöchentlicher GitHub-Workflow** (`.github/workflows/openclaw-monitor.yml`) hält JClaw über neue OpenClaw-Versionen und Community-Feature-Wünsche auf dem Laufenden und prüft sie automatisch gegen die JClaw-Vision (100 % Parität — zuletzt geprüfte Version in `.github/state/openclaw-last-checked.txt`):
