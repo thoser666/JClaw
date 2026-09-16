@@ -15,6 +15,8 @@ import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -45,12 +47,16 @@ public class NodeSidecarBridge implements Closeable {
     public static final String METHOD_INFO = "sidecar.info";
     public static final String METHOD_LIST_TOOLS = "sidecar.listTools";
     public static final String METHOD_CALL_TOOL = "tool.call";
+    public static final String METHOD_PLUGIN_LOAD = "plugin.load";
+    public static final String METHOD_PLUGIN_UNLOAD = "plugin.unload";
 
     public static final int ERROR_METHOD_NOT_FOUND = -32601;
     public static final int ERROR_TOOL_NOT_FOUND = -32001;
     public static final int ERROR_TOOL_EXECUTION = -32002;
     public static final int ERROR_INTERNAL = -32003;
     public static final int ERROR_TIMEOUT = -32004;
+    public static final int ERROR_HOOK_BLOCKED = -32005;
+    public static final int ERROR_PLUGIN_INVALID = -32006;
 
     public static final long DEFAULT_CALL_TIMEOUT_MILLIS = 15_000;
     public static final long DEFAULT_READY_TIMEOUT_MILLIS = 5_000;
@@ -74,6 +80,7 @@ public class NodeSidecarBridge implements Closeable {
     private volatile Thread readerThread;
     private volatile CountDownLatch readyLatch = new CountDownLatch(1);
     private volatile JsonNode readyInfo;
+    private volatile Path scriptFile;
 
     private NodeSidecarBridge(String script, ObjectMapper objectMapper, long callTimeoutMillis, long readyTimeoutMillis) {
         this.script = script;
@@ -85,13 +92,22 @@ public class NodeSidecarBridge implements Closeable {
 
     /** Lädt das mitgelieferte Referenz-Sidecar ({@code sidecar/protocol-sidecar.js}) vom Classpath. */
     public static String defaultScript() {
-        try (InputStream in = NodeSidecarBridge.class.getResourceAsStream("/sidecar/protocol-sidecar.js")) {
+        return loadScript("/sidecar/protocol-sidecar.js");
+    }
+
+    /** Lädt das Plugin-Runtime-Sidecar ({@code sidecar/plugin-sidecar.js}, P4-01) vom Classpath. */
+    public static String pluginScript() {
+        return loadScript("/sidecar/plugin-sidecar.js");
+    }
+
+    private static String loadScript(String resource) {
+        try (InputStream in = NodeSidecarBridge.class.getResourceAsStream(resource)) {
             if (in == null) {
-                throw new IllegalStateException("Referenz-Sidecar /sidecar/protocol-sidecar.js fehlt im Classpath.");
+                throw new IllegalStateException("Referenz-Sidecar " + resource + " fehlt im Classpath.");
             }
             return new String(in.readAllBytes(), StandardCharsets.UTF_8);
         } catch (IOException e) {
-            throw new UncheckedIOException("Referenz-Sidecar konnte nicht geladen werden.", e);
+            throw new UncheckedIOException("Referenz-Sidecar " + resource + " konnte nicht geladen werden.", e);
         }
     }
 
@@ -144,6 +160,26 @@ public class NodeSidecarBridge implements Closeable {
             params.set("arguments", arguments);
         }
         return execute(METHOD_CALL_TOOL, params);
+    }
+
+    /**
+     * Lädt ein Plugin in den Sidecar: Die {@code source} wird als CommonJS-Entry ausgeführt
+     * (OpenClaw-Semantik {@code definePluginEntry}/{@code defineChannelPluginEntry}); Tools,
+     * Commands und Hooks werden dann zur Laufzeit registriert. Liefert die Load-Quittung
+     * ({@code id}, {@code name}, {@code tools}, {@code commands}, {@code hooks}).
+     */
+    public JsonNode loadPlugin(String id, String source) throws IOException, SidecarCallException, SidecarTimeoutException {
+        ObjectNode params = objectMapper.createObjectNode();
+        params.put("id", id);
+        params.put("source", source);
+        return execute(METHOD_PLUGIN_LOAD, params);
+    }
+
+    /** Entfernt ein geladenes Plugin (und seine registrierten Tools/Commands/Hooks) aus dem Sidecar. */
+    public JsonNode unloadPlugin(String id) throws IOException, SidecarCallException, SidecarTimeoutException {
+        ObjectNode params = objectMapper.createObjectNode();
+        params.put("id", id);
+        return execute(METHOD_PLUGIN_UNLOAD, params);
     }
 
     /** Beendet den laufenden Prozess und startet einen neuen (Handshake inklusive). */
@@ -215,32 +251,51 @@ public class NodeSidecarBridge implements Closeable {
     }
 
     private void startProcess() throws IOException {
-        Process process = new ProcessBuilder("node", "-e", script).start();
-        this.process = process;
-        this.stdin = new BufferedWriter(new OutputStreamWriter(process.getOutputStream(), StandardCharsets.UTF_8));
-        BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8));
-        drainStderr(process);
-        readyInfo = null;
-        readyLatch = new CountDownLatch(1);
-        pending.clear();
-
-        this.readerThread = new Thread(() -> readerLoop(process, reader), "jclaw-sidecar-reader");
-        this.readerThread.setDaemon(true);
-        this.readerThread.start();
-
-        log.info("Node-Sidecar-Prozess gestartet (pid={}); warte auf {} ...", process.pid(), METHOD_READY);
+        // Das Sidecar-Skript wird in eine temporäre Datei geschrieben und als <file>-Argument
+        // gestartet: `-e`-Argumente unterliegen auf Windows der CreateProcess-Längenbegrenzung
+        // (~8191 Zeichen) und größere Scripts (z. B. plugin-sidecar.js, P4-01) würden dadurch
+        // nicht starten. Die Datei wird beim Beenden des Prozesses entfernt.
+        Path scriptFile = null;
+        Process process = null;
         try {
-            if (!readyLatch.await(readyTimeoutMillis, TimeUnit.MILLISECONDS)) {
-                log.error("Node-Sidecar (pid={}) hat sich nicht innerhalb von {} ms bereitgemeldet.", process.pid(), readyTimeoutMillis);
+            scriptFile = Files.createTempFile("jclaw-sidecar-", ".js");
+            Files.writeString(scriptFile, script, StandardCharsets.UTF_8);
+            process = new ProcessBuilder("node", scriptFile.toString()).start();
+            this.process = process;
+            this.scriptFile = scriptFile;
+            this.stdin = new BufferedWriter(new OutputStreamWriter(process.getOutputStream(), StandardCharsets.UTF_8));
+            BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8));
+            drainStderr(process);
+            readyInfo = null;
+            readyLatch = new CountDownLatch(1);
+            pending.clear();
+
+            this.readerThread = new Thread(() -> readerLoop(this.process, reader), "jclaw-sidecar-reader");
+            this.readerThread.setDaemon(true);
+            this.readerThread.start();
+
+            log.info("Node-Sidecar-Prozess gestartet (pid={}); warte auf {} ...", process.pid(), METHOD_READY);
+            try {
+                if (!readyLatch.await(readyTimeoutMillis, TimeUnit.MILLISECONDS)) {
+                    log.error("Node-Sidecar (pid={}) hat sich nicht innerhalb von {} ms bereitgemeldet.", process.pid(), readyTimeoutMillis);
+                    closeProcess();
+                    throw new SidecarTimeoutException(METHOD_READY, readyTimeoutMillis);
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
                 closeProcess();
-                throw new SidecarTimeoutException(METHOD_READY, readyTimeoutMillis);
+                throw new IOException("Unterbrochen während des Sidecar-Handshakes.", e);
             }
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            closeProcess();
-            throw new IOException("Unterbrochen während des Sidecar-Handshakes.", e);
+            log.info("Node-Sidecar bereit (pid={}): {}.", process.pid(), readyInfo);
+        } catch (IOException | RuntimeException e) {
+            if (process != null) {
+                process.destroy();
+            }
+            deleteScriptFile(scriptFile);
+            this.process = null;
+            this.scriptFile = null;
+            throw e;
         }
-        log.info("Node-Sidecar bereit (pid={}): {}.", process.pid(), readyInfo);
     }
 
     private void readerLoop(Process process, BufferedReader reader) {
@@ -329,9 +384,21 @@ public class NodeSidecarBridge implements Closeable {
             }
             log.info("Node-Sidecar-Prozess beendet (pid={}).", process.pid());
         }
+        deleteScriptFile(scriptFile);
     }
 
-    boolean processAlive() {
+    private void deleteScriptFile(Path file) {
+        if (file != null) {
+            try {
+                Files.deleteIfExists(file);
+            } catch (IOException ignored) {
+                // Temp-Datei kann nicht entfernt werden (z. B. noch geöffnet) - bleibt liegen
+            }
+        }
+        scriptFile = null;
+    }
+
+    public boolean processAlive() {
         Process process = this.process;
         return process != null && process.isAlive();
     }

@@ -110,7 +110,7 @@ Sub-Agenten und deren Verwaltung.
 | ID | Baustein | Beschreibung | Priorität | Status |
 |---|---|---|---|---|
 | P1-07 | Kern-Tool: Agent | `spawn_agent` / Multi-Agent-Subprozesse (Deny-by-Default, max-depth-Limit) | 🟢 | ✅ |
-| P4-01 | Plugin-Laufzeit | Node-Sidecar führt `definePluginEntry`/`defineChannelPluginEntry` aus (setzt P1-03 voraus) | 🔴 | 🚫 |
+| P4-01 | Plugin-Laufzeit | Node-Sidecar führt `definePluginEntry`/`defineChannelPluginEntry` aus (setzt P1-03 voraus). **Runtime-Slice ✅:** `plugin-sidecar.js` (`plugin.load`/`plugin.unload`, Tool-/Command-/Hook-Registrierung zur Laufzeit statt statisch, `before_tool_call`/`after_tool_call`-Hooks mit `ERROR_HOOK_BLOCKED`), Java `NodeSidecarPluginRuntime` + `EntryPointResolver` (Entry via `package.json`→`main`/Fallbacks, Traversal-Schutz). **Offen:** Voll-Hook-Katalog, Channel-Runtime, npm/TypeScript-Bundles, Spring-AI-Tool-Schema-Binding | 🔴 | 🔵 |
 | P4-03 | Media-Provider | Speech/Media-Provider (TTS/STT) | 🟢 | ⬜ |
 | P4-04 | Provider-Abstraktion | Modell-Provider über Ollama hinaus (OpenAI-kompatibel, Anthropic, …) via Spring AI; Referenz-Stand 2026.8.x: GPT-5.6 (+ Sol/Terra/Luna), Claude Sonnet 5, Meta Muse Spark 1.1, Featherless, ClawRouter, lokales Setup (Ollama/llama.cpp/LM Studio) | 🟡 | ⬜ |
 
@@ -218,6 +218,8 @@ Anmerkungen:
 
 > **Plugin-SDK-Stand (2026.6.34):** `before_agent_start`, Root-`openclaw/plugin-sdk`-Imports, `providerAuthEnvVars`/`channelEnvVars` werden nach dem 24.07.2026 entfernt. Die Node-Sidecar-Laufzeit (P4-01) muss gegen den **aktuellen** SDK-Stand bauen (Subpath-Imports, moderne Hook-Stages, `setup`-Deskriptoren); Details in `openclaw-compat.md` §3. Der Versionsstand der Referenz (2026.7.1 Stable / 2026.8.1-beta.2) ist in `openclaw-compat.md` §1.1 dokumentiert.
 
+> **Plugin-Laufzeit-Runtime (P4-01) getroffen:** Das Plugin-Runtime-Sidecar `sidecar/plugin-sidecar.js` führt CommonJS-Entries über die OpenClaw-Entry-Semantik aus (`definePluginEntry`/`defineChannelPluginEntry` in einer `vm`-Sandbox): Tools/Commands/Hooks werden zur Laufzeit registriert (`plugin.load`/`plugin.unload`), `sidecar.listTools` liefert Referenz- + Plugin-Tools, `tool.call` führt `before_tool_call`/`after_tool_call`-Hooks aus (Blocking via `ERROR_HOOK_BLOCKED`). Java-Seite: `NodeSidecarPluginRuntime` (opt-in `jclaw.agent.plugins.runtime.enabled=true`, lazy gestarteter Sidecar) + `EntryPointResolver` (Entry via `package.json`→`main` mit Traversal-Schutz, sonst `src/index.js`/`index.js`/`main.js`). Dazu wurde `NodeSidecarBridge` auf Temp-Datei-Start umgestellt (Workaround für die Windows-`CreateProcess`-Längenbegrenzung bei großen `-e`-Scripts). Offen: npm/TypeScript-Bundles, Voll-Hook-Katalog, Channel-Runtime, Spring-AI-Tool-Schema-Binding — Details `docs/bridge-protocol.md` §8/§9.
+
 > Die Plugin-Laufzeit-Entscheidung (Node-Sidecar vs. GraalJS vs. Java-Reimplementation) ist getroffen: **Node-Sidecar**, siehe [ADR-0001](adr/0001-node-sidecar-plugin-runtime.md). Das Bridge-Protokoll ist vollständig spezifiziert (siehe [bridge-protocol.md](bridge-protocol.md), P1-03).
 
 ## Definition of Done (Paritäts-Kriterien)
@@ -235,7 +237,7 @@ Ein Baustein gilt als paritätisch, wenn:
 ## Nächste Schritte
 
 1. **P3-06/P3-08** Weitere Channel-Adapter (**IRC ✅, Email ✅, Mattermost ✅, Google Chat ✅, Feishu ✅, Synology Chat ✅, X ✅, ClickClack ✅, Buzz (Nostr) ✅**) — **P3-06 ist damit komplett.** Die **Ingress-Monitor-Abstraktion** aus dem OpenClaw-Plugin-SDK ist **umgesetzt (P3-08 ✅)**; Adapter können sie nutzen statt eigener Polling-Logik (Beispiele: X-DM, Telegram, Email, ClickClack, Buzz). Dabei **P3-07** Media-Message-Support berücksichtigen.
-2. **P4-01** Node-Sidecar-Plugin-Laufzeit — gegen den aktuellen Plugin-SDK-Stand (Subpath-Imports, moderne Hook-Stages), mit **P4-09** Security-Maßnahmen.
+2. **P4-01** Node-Sidecar-Plugin-Laufzeit — Runtime-Slice umgesetzt (🔵, **in Arbeit**): `plugin-sidecar.js` registriert Tools/Commands/Hooks zur Laufzeit (`definePluginEntry`/`defineChannelPluginEntry`, `before_tool_call`/`after_tool_call`), `NodeSidecarPluginRuntime` + `EntryPointResolver` laden Bundles per `package.json`→`main`/Fallbacks. Gegen den aktuellen Plugin-SDK-Stand (Subpath-Imports, moderne Hook-Stages) bauen; offen: Voll-Hook-Katalog, Channel-Runtime, npm/TypeScript-Bundles, Spring-AI-Tool-Schema-Binding, dazu **P4-09** Security-Maßnahmen.
 3. **P4-07/P4-08** Automations-Erweiterungen aus OpenClaw 2026.8.x (Goals & Queues, Background-Sessions).
 4. **P4-11–P4-14** Browser-/Talk-/Voice-Features — Referenz OpenClaw 2026.8.2 (Browser-Steuerung ohne Gateway, Realtime-Talk, TTS-Personas).
 5. **Versions-Monitor-Triage:** Vom wöchentlichen OpenClaw-Monitor erzeugte Issues regelmäßig durchgehen (neue Stable-Linie **2026.9.x**, neue Features/Community-Wünsche) und gegen die oben stehenden Referenz-Versionen + P-Items aktualisieren — siehe README "OpenClaw-Versionsmonitor".

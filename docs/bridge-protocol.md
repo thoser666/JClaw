@@ -7,7 +7,7 @@
 
 ## 1. Überblick
 
-Der Java-Kern kommuniziert mit einem externen **Node.js-Sidecar-Prozess** über **JSON-RPC 2.0**, Newline-delimited über **stdio**. Der Sidecar ist die spätere Plugin-Laufzeit (P4-01: `definePluginEntry`/`defineChannelPluginEntry`); die Bridge selbst bleibt generisch, damit sie auch für Hooks oder MCP-Skripte nutzbar bleibt.
+Der Java-Kern kommuniziert mit einem externen **Node.js-Sidecar-Prozess** über **JSON-RPC 2.0**, Newline-delimited über **stdio**. Der Sidecar ist die Plugin-Laufzeit (P4-01: `definePluginEntry`/`defineChannelPluginEntry`, siehe §8); die Bridge selbst bleibt generisch, damit sie auch für Hooks oder MCP-Skripte nutzbar bleibt.
 
 ```
 ┌────────────────────┐   JSON-RPC 2.0 / NDJSON über stdio   ┌──────────────────────┐
@@ -133,19 +133,69 @@ Endet die stdout-Ausgabe ohne `close()` (Prozess gecrasht), werden alle in-fligh
 
 | Baustein | Zweck |
 |---|---|
-| `NodeSidecarBridge` | Verwaltete Bridge: `start(...)`, `ping()`, `info()`, `listTools()`, `callTool(name, args)`, `restart()`, `close()` |
+| `NodeSidecarBridge` | Verwaltete Bridge: `start(...)`, `ping()`, `info()`, `listTools()`, `callTool(name, args)`, `loadPlugin(id, source)`, `unloadPlugin(id)`, `restart()`, `close()` |
 | `JsonRpcMessage` | Nachrichtenmodell (Request/Response/Error/Notification, strukturierte Fehler) |
 | `JsonRpcLineCodec` | NDJSON-Encoding/-Decoding (reines Framing, unit-getestet) |
 | `SidecarCallException` | Sidecar-Fehler mit JSON-RPC-Fehlercode |
 | `SidecarTimeoutException` | Call-/Ready-Timeout |
 | `SidecarToolDescriptor` | Tool-Registrierung (`name`, `description`, `parameters`) |
+| `NodeSidecarPluginRuntime` | Plugin-Laufzeit (P4-01): `load(Plugin)` → Quittung (Tools/Commands/Hooks), `unload(id)`, `loadAvailable()`, `tools()`, `callTool(...)`, `close()` |
+| `EntryPointResolver` | Entry-Auflösung eines Bundles (`package.json` → `main`, Traversal-Schutz, dann `src/index.js` … `main.js`) |
 
 Testabdeckung (P1-03): `JsonRpcLineCodecTest` (Codec/Framing) und `NodeSidecarBridgeTest` (Integration mit echtem Node.js; übersprungen, wenn Node nicht verfügbar). Abgedeckt: Handshake, ping/info/listTools, Tool-Aufruf (Erfolg + Fehler), Method-NotFound, Call-Timeout, Restart (neue PID), Close, Aufruf nach Close/Restart-nach-Close.
 
-## 8. Offene Punkte für P4-01
+Starten: `NodeSidecarBridge.start(ObjectMapper)` startet das Referenz-Sidecar (`protocol-sidecar.js`); `NodeSidecarBridge.pluginScript()` liefert das Plugin-Runtime-Sidecar (`plugin-sidecar.js`). Das Script wird in eine **temporäre Datei** geschrieben und als `<file>`-Argument gestartet — `-e`-Argumente unterliegen auf Windows der `CreateProcess`-Längenbegrenzung (~8191 Zeichen) und größere Scripts starteten sonst nicht (behoben mit P4-01).
 
-- **Plugin-Laufzeit:** Sidecar führt `definePluginEntry`/`defineChannelPluginEntry` aus; Tools/Commands/Hooks werden zur Laufzeit registriert statt statisch (`sidecar.listTools` liefert dann Plugin-Tools).
-- **Tool-Schema:** `parameters` an das Spring-AI-Tool-Calling (`@Tool`, `JsonSchema`-Annotationen) anbinden.
+## 8. Plugin-Laufzeit (P4-01)
+
+Das Plugin-Runtime-Sidecar (`sidecar/plugin-sidecar.js`) stellt die OpenClaw-Entry-Semantik bereit: Plugins registrieren ihre **Tools, Commands und Hooks zur Laufzeit** (statt statisch) über `definePluginEntry` (Agent-Plugins) bzw. `defineChannelPluginEntry` (Channel-Plugins).
+
+### Entry-Vertrag (Referenz-Laufzeit)
+
+Die Plugin-Source ist ein **CommonJS-Entry** ohne npm/TypeScript-Abhängigkeiten; die Kontrakte `definePluginEntry`/`defineChannelPluginEntry` stellt das Sidecar als Globals in einer `vm`-Sandbox bereit:
+
+```js
+module.exports = definePluginEntry({
+  id: 'acme/demo',
+  name: 'Demo',
+  register(api) {
+    api.registerTool({
+      name: 'greet',
+      description: 'Begrüßt jemanden.',
+      parameters: { type: 'object', properties: { name: { type: 'string' } }, required: ['name'] },
+      execute(args) { return { greeting: 'Hallo ' + args.name }; }
+    });
+    api.registerCommand({ name: 'demo-help', description: 'Slash-Command.', execute(args) { return { ok: true }; } });
+    api.on('before_tool_call', (ctx) => {
+      if (ctx.arguments && ctx.arguments.name === 'block') throw new Error('gesperrt');
+    }, { matcher: 'greet', priority: 10 });
+  }
+});
+```
+
+`register(api)` erhält: `registerTool({name, description, parameters, outputSchema, execute})`, `registerCommand({name, description, execute})` und `on(event, handler, {matcher, priority})`. Hooks werden in absteigender `priority` ausgeführt; `matcher` ist ein Name-String, RegExp oder `undefined` (alle Tools). `before_tool_call`/`after_tool_call` werden beim `tool.call` im Sidecar ausgeführt — ein werfender Handler blockiert den Aufruf bzw. das Ergebnis mit **`ERROR_HOOK_BLOCKED` (-32005)**.
+
+### Methoden
+
+| Methode | Params | Ergebnis |
+|---|---|---|
+| `plugin.load` | `{id, source}` | Quittung `{id, name, tools:[{name, description, parameters}], commands:[String], hooks:[{event, priority}]}`; ESM-transpilierte Sources (`exports.default`) werden aufgelöst; `plugin` in vm-Sandbox ohne Zugriff auf `require`/`process` |
+| `plugin.unload` | `{id}` | `{id, removed}` — entfernt Tools/Commands/Hooks des Plugins (statische Referenz-Tools werden wiederhergestellt) |
+
+`sidecar.listTools` liefert Referenz- + Plugin-Tools (Plugin-Tools mit `pluginId`). `tool.call` dispatched über die kombinierte Registry. Fehler: `ERROR_HOOK_BLOCKED` (-32005), `ERROR_PLUGIN_INVALID` (-32006, z. B. fehlende `definePluginEntry`/`register` oder Fehler in `register()`).
+
+### Entry-Auflösung (Java)
+
+`EntryPointResolver` löst den Entry-Punkt eines Bundles auf: `package.json` → `main` (nur innerhalb des Plugin-Ordners, **Traversal-Schutz**), sonst Fallbacks `src/index.js`, `src/index.mjs`, `index.js`, `index.mjs`, `main.js`. Ohne Entry bleibt das Plugin Control-Plane-only (`load()` liefert `Optional.empty()`).
+
+### Laufzeit-Wiring
+
+`NodeSidecarPluginRuntime` (`@Component`, aktiv bei `jclaw.agent.plugins.runtime.enabled=true`, Deny-by-Default) startet den Node-Sidecar lazy, lädt über `load()`/`loadAvailable()` alle gültigen OpenClaw-Plugins mit Entry-Point und hält die Load-Quittungen. Tools sind über `tools()`/`callTool()` erreichbar; `close()` beendet den Sidecar-Prozess.
+
+## 9. Verbleibende offene Punkte (nach P4-01)
+
+- **Tool-Schema → Spring-AI:** `parameters` (JSON-Schema) bislang roher Knoten (`SidecarToolDescriptor.parameters()`); Anbindung an das Spring-AI-Tool-Calling (`@Tool`, `JsonSchema`) steht aus.
+- **npm/TypeScript-Bundles:** `definePluginEntry`-Shim + CommonJS sind die **Referenz-Laufzeit**; echte OpenClaw-Bundles (ESM-TypeScript, `openclaw/plugin-sdk`-Imports) benötigen npm-Auflösung/Bundling — gegen den neuen SDK-Stand (Subpath-Imports, moderne Hook-Stages, `setup`-Deskriptoren).
+- **Hooks/Channels:** Nur `before_tool_call`/`after_tool_call` werden ausgeführt; weitere Lifecycle-Events (P1-11) und die Channel-Runtime (`defineChannelPluginEntry`, Empfang) laufen über dieselbe Bridge, Ausführung folgt.
 - **Backpressure/Parallelität:** Bisher eine Antwort pro Request (id-basiert); keine Limits für gleichzeitige Aufrufe definiert.
-- **Hooks/Channels:** Lifecycle-Events (P1-11) und Channel-Bridge (P3-01) laufen über dieselbe Bridge; Methoden-Katalog wird erweitert.
 - **Stderr-Auswertung:** Bisher nur Log; bei Startfehlern (fehlendes npm-Modul) könnte stderr gezielt in die Fehlermeldung fließen.

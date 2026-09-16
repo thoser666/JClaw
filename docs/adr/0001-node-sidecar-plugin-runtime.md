@@ -70,3 +70,13 @@ Die Entscheidung ist durch einen lauffähigen Spike validiert und in **P1-03** z
 - Tests: `JsonRpcLineCodecTest` (Codec) und `NodeSidecarBridgeTest` (Integration mit echtem Node.js; übersprungen, wenn Node nicht verfügbar).
 
 Damit ist die zentrale Risikofrage (Java ↔ Node über JSON-RPC/stdio funktioniert) beantwortet; P4-01 baut die eigentliche Plugin-Laufzeit auf der Bridge auf.
+
+## Status (P4-01)
+
+Die Plugin-Laufzeit ist als **Runtime-Slice** umgesetzt:
+
+- `sidecar/plugin-sidecar.js` — Plugin-Runtime-Sidecar: `definePluginEntry`/`defineChannelPluginEntry` in einer `vm`-Sandbox, Tool-/Command-/Hook-Registrierung zur Laufzeit (`plugin.load`/`plugin.unload`), Ausführung von `before_tool_call`/`after_tool_call` (Blocking via `ERROR_HOOK_BLOCKED`).
+- `NodeSidecarPluginRuntime` + `EntryPointResolver` — Java-Seite: Laden von Control-Plane-gültigen OpenClaw-Plugins über deren Entry-Point (`package.json`→`main`, Traversal-Schutz, Fallbacks).
+- `NodeSidecarBridge` startet das Sidecar-Script jetzt über eine **temporäre Datei** statt `-e` (Workaround für die `CreateProcess`-Längenbegrenzung auf Windows, ~8191 Zeichen).
+
+Offen: npm/TypeScript-Bundles (echte 1:1-Parität), Voll-Hook-Katalog, Channel-Runtime, Spring-AI-Tool-Schema-Binding. Details: [docs/bridge-protocol.md](../bridge-protocol.md) §8/§9.

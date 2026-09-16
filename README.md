@@ -38,6 +38,7 @@ Das Projekt folgt der hexagonalen Struktur unter dem Package-Stamm `biz.brumm`:
 * **Open Memory Vault (P4-02):** Materialisiert Konversations-Memory als menschenlesbare Markdown-Dokumente in einem konfigurierbaren Verzeichnis — lesbar/editierbar z. B. via Tolaria oder Obsidian. H2 bleibt Quelle der Wahrheit; der Vault ist ein idempotenter Auszug, der Compaction/Neustarts übersteht. Ein Watcher-Sync (Read-Back) erkennt User-Änderungen an `.md`-Dateien und ingestet sie zurück in die Konversation (siehe [Open Memory Vault](#open-memory-vault-p4-02)).
 * **Plugins (Control-Plane):** Plugin-Manifeste im OpenClaw-Format (`openclaw.plugin.json`) sowie kompatible fremde Bundles (Agent Plugins, Codex, Claude, Cursor) werden gelesen und ohne Codeausführung validiert (Pflichtfelder, Schema-Struktur).
 * **Node-Sidecar-Bridge (P1-03):** Verwaltete JSON-RPC-Bridge zu einem Node.js-Sidecar-Prozess (Handshake, Call-/Ready-Timeout, strukturierte Fehler, Restart) — Grundlage für die Plugin-Laufzeit in P4-01. Spezifikation: [docs/bridge-protocol.md](docs/bridge-protocol.md).
+* **Plugin-Runtime (P4-01):** Das Sidecar-`plugin-sidecar.js` führt Plugin-Entries über die OpenClaw-Entry-Semantik aus (`definePluginEntry`/`defineChannelPluginEntry`): Tools, Commands und Hooks werden zur Laufzeit registriert statt statisch, inkl. `before_tool_call`/`after_tool_call`-Hooks. `NodeSidecarPluginRuntime` lädt Bundles per `package.json`→`main` (Traversal-Schutz, Fallbacks) — opt-in über `jclaw.agent.plugins.runtime.enabled` (siehe [Plugin-Runtime](#plugin-runtime-p4-01)).
 * **Control-UI (P2-05):** Statische Web-Oberfläche (kein Build-Schritt, keine externen Abhängigkeiten) unter `http://localhost:8080` — Agent-Aufgaben ausführen, Konversationen laden/löschen, Skills und Plugins anzeigen (siehe [Control-UI](#control-ui)).
 * **Fehlerbehandlung:** Ein globaler `@RestControllerAdvice` liefert bei ungültigen Anfragen (z. B. leerem Prompt) eine 400-Antwort mit Fehlermeldung.
 * **Tool-Policies (P1-08):** Per `jclaw.agent.tools.allow`/`.deny` lassen sich einzelne Werkzeuge für den Agenten freischalten bzw. sperren (Allow-/Denyliste, Deny-by-Default; Deny schlägt Allow). Deaktivierte Werkzeuge werden dem LLM nicht als Tool-Schema angeboten — analog zu OpenClaws `tools.allow`-Policy.
@@ -83,6 +84,8 @@ Die JSON5-Datei wird beim Start automatisch geladen und überschreibt Werte aus 
 | `jclaw.agent.max-iterations` | `8` | Maximale Agent-Iterationen (Tool-Runden) |
 | `jclaw.agent.max-history-messages` | `10` | Nachrichten pro Kontext im Memory-Fenster |
 | `jclaw.agent.plugins.dir` | `./plugins` | Verzeichnis mit Plugin-Ordnern (Manifeste) |
+| `jclaw.agent.plugins.runtime.enabled` | `false` | Schaltet die Plugin-Laufzeit frei (P4-01, Node-Sidecar; nur `true` startet den Sidecar, Deny-by-Default) |
+| `jclaw.agent.plugins.runtime.call-timeout-millis` | `15000` | Call-Timeout für Sidecar-Aufrufe der Plugin-Runtime |
 | `jclaw.agent.skills.dir` | `./skills` | Verzeichnis mit Skill-Ordnern (`SKILL.md`) |
 | `jclaw.agent.skills.enabled` | `-` (leer) | Namen der zu ladenden Skills (leer = keine Skills aktiv) |
 | `jclaw.agent.filetool.workdir` | `-` (nicht gesetzt) | Arbeitsverzeichnis der Datei-Werkzeuge. Erst wenn gesetzt, werden `readFile`, `listDirectory`, `writeFile`, `glob`, `grep` und `apply_patch` registriert (Deny-by-Default) |
@@ -204,6 +207,30 @@ Beispiel (OpenClaw):
 ```
 
 Die Manifeste werden **ohne Codeausführung** validiert (Control-Plane). Ungültige Plugins werden in der API mit `valid: false` und einer Fehlermeldung ausgewiesen statt verworfen. Die eigentliche Plugin-Laufzeit (TypeScript) erfordert einen Node-Sidecar (siehe `docs/openclaw-compat.md`).
+
+### Plugin-Runtime (P4-01)
+
+Mit `jclaw.agent.plugins.runtime.enabled=true` lädt JClaw die gültigen OpenClaw-Plugins zusätzlich in einen Node-Sidecar (`plugin-sidecar.js`). Der Entry-Point eines Bundles wird über `package.json` → `main` (nur innerhalb des Plugin-Ordners, Traversal-Schutz) bzw. die Fallbacks `src/index.js`, `src/index.mjs`, `index.js`, `index.mjs`, `main.js` aufgelöst. Der Entry nutzt die OpenClaw-Entry-Semantik:
+
+```js
+module.exports = definePluginEntry({
+  id: 'acme/demo',
+  name: 'Demo',
+  register(api) {
+    api.registerTool({
+      name: 'greet',
+      description: 'Begrüßt jemanden.',
+      parameters: { type: 'object', properties: { name: { type: 'string' } }, required: ['name'] },
+      execute(args) { return { greeting: 'Hallo ' + args.name }; }
+    });
+    api.on('before_tool_call', (ctx) => {
+      if (ctx.arguments && ctx.arguments.name === 'block') throw new Error('gesperrt');
+    }, { matcher: 'greet', priority: 10 });
+  }
+});
+```
+
+Tools, Commands und Hooks werden zur Laufzeit registriert (`plugin.load`/`plugin.unload`); `before_tool_call`/`after_tool_call`-Hooks laufen beim Tool-Aufruf (Blocking via Fehlercode `-32005`). Bundles ohne Entry-Point bleiben Control-Plane-only. Voraussetzung: Node.js auf dem Zielsystem. Details und Protokoll: [docs/bridge-protocol.md](docs/bridge-protocol.md) §8.
 
 ## Datei-Werkzeuge
 
