@@ -194,7 +194,7 @@ module.exports = definePluginEntry({
 
 ## 9. Verbleibende offene Punkte (nach P4-01)
 
-- **Tool-Schema → Spring-AI:** `parameters` (JSON-Schema) bislang roher Knoten (`SidecarToolDescriptor.parameters()`); Anbindung an das Spring-AI-Tool-Calling (`@Tool`, `JsonSchema`) steht aus.
+- **Tool-Schema → Spring-AI:** `parameters` (JSON-Schema) bislang roher Knoten (`SidecarToolDescriptor.parameters()`); Anbindung an das Spring-AI-Tool-Calling (`@Tool`, `JsonSchema`) **umgesetzt (hermetisches Binding, P4-01):** `PluginToolCallback` (Spring-AI-1.0-{@link ToolCallback}, record `SidecarToolDescriptor` + `BiFunction<String,String,String>`-Dispatcher) exponiert `getToolDefinition()` (DefaultToolDefinition; `inputSchema` aus `descriptor.parameters()` mit Fallback `{"type":"object","properties":{}}` bei `null`) und dispatched `call(String)`; der Spring-AI-Merge in den Agent-Callback-Listen (mirroring `McpToolRegistry`) ist **noch offen** &mdash; siehe Abschnitt 8 + ADR.
 - **npm/TypeScript-Bundles:** `definePluginEntry`-Shim + CommonJS sind die **Referenz-Laufzeit**; echte OpenClaw-Bundles (ESM-TypeScript, `openclaw/plugin-sdk`-Imports) benötigen npm-Auflösung/Bundling — gegen den neuen SDK-Stand (Subpath-Imports, moderne Hook-Stages, `setup`-Deskriptoren).
 - **Hooks/Channels:** Nur `before_tool_call`/`after_tool_call` werden ausgeführt; weitere Lifecycle-Events (P1-11) und die Channel-Runtime (`defineChannelPluginEntry`, Empfang) laufen über dieselbe Bridge, Ausführung folgt.
 - **Backpressure/Parallelität:** Bisher eine Antwort pro Request (id-basiert); keine Limits für gleichzeitige Aufrufe definiert.
