@@ -8,7 +8,9 @@ import biz.brumm.infrastructure.sidecar.NodeSidecarBridge;
 import biz.brumm.infrastructure.sidecar.SidecarCallException;
 import biz.brumm.infrastructure.sidecar.SidecarTimeoutException;
 import biz.brumm.infrastructure.sidecar.SidecarToolDescriptor;
+import org.springframework.ai.tool.ToolCallback;
 import org.slf4j.Logger;
+import org.springframework.ai.tool.ToolCallback;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
@@ -128,6 +130,33 @@ public class NodeSidecarPluginRuntime implements Closeable {
     public JsonNode callTool(String name, JsonNode arguments)
             throws IOException, SidecarCallException, SidecarTimeoutException {
         return bridge().callTool(name, arguments);
+    }
+
+    /**
+     * Liefert Spring-AI-{@link ToolCallback}s für alle im Sidecar registrierten Plugin-Tools.
+     * <p>
+     * Spiegel zu {@code McpToolRegistry.toolCallbacks()}: Jeder {@link SidecarToolDescriptor} wird
+     * über das hermetische {@link PluginToolCallback}-Binding (getSharedToolDescriptor + Dispatcher)
+     * an das Spring-AI-Tool-Calling angebunden; der Dispatcher delegiert an {@link #callTool(String, tools.jackson.databind.JsonNode)}.
+     */
+    public List<ToolCallback> toolCallbacks() {
+        try {
+            return tools().stream()
+                    .map(descriptor -> (ToolCallback) new PluginToolCallback(descriptor, this::dispatchTool))
+                    .toList();
+        } catch (IOException e) {
+            throw new IllegalStateException("Plugin-Tools nicht über den Sidecar lesbar: " + e.getMessage(), e);
+        }
+    }
+
+    /** Dispatcher-Brücke: serialisiert Plugin-Tool-Aufrufe als JSON-RPC an den Sidecar. */
+    private String dispatchTool(String name, String args) {
+        try {
+            JsonNode result = callTool(name, objectMapper.readTree(args));
+            return objectMapper.writeValueAsString(result);
+        } catch (IOException e) {
+            throw new IllegalStateException("Plugin-Tool '" + name + "' fehlgeschlagen: " + e.getMessage(), e);
+        }
     }
 
     /** {@code true}, wenn der Node-Sidecar-Prozess aktiv läuft. */

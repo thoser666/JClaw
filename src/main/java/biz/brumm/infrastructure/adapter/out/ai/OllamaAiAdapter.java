@@ -11,6 +11,7 @@ import biz.brumm.domain.port.out.HookCallback;
 import biz.brumm.domain.port.out.ToolPolicy;
 import biz.brumm.domain.service.AgentLoopLimitExceededException;
 import biz.brumm.domain.service.CompactionService;
+import biz.brumm.infrastructure.adapter.out.plugin.NodeSidecarPluginRuntime;
 import biz.brumm.infrastructure.mcp.McpToolRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -51,16 +52,21 @@ public class OllamaAiAdapter implements AiProviderPort {
     public OllamaAiAdapter(ChatModel chatModel, ToolCallingManager toolCallingManager, List<AgentTool> tools,
                            ObjectProvider<McpToolRegistry> mcpToolRegistry, ChatMemory chatMemory,
                            ToolPolicy toolPolicy, ObjectProvider<HookCallback> hookCallbackProvider,
-                           ObjectProvider<CompactionService> compactionServiceProvider) {
+                           ObjectProvider<CompactionService> compactionServiceProvider,
+                           ObjectProvider<NodeSidecarPluginRuntime> nodeSidecarPluginRuntimeProvider) {
         this.chatModel = chatModel;
         this.toolCallingManager = toolCallingManager;
         this.chatMemory = chatMemory;
         this.hookCallback = hookCallbackProvider.getIfAvailable();
         this.compactionService = compactionServiceProvider.getIfAvailable();
         List<ToolCallback> callbacks = new ArrayList<>(List.of(ToolCallbacks.from(tools.toArray())));
-        McpToolRegistry registry = mcpToolRegistry.getIfAvailable();
-        if (registry != null) {
-            callbacks.addAll(registry.toolCallbacks());
+        McpToolRegistry mcpRegistry = mcpToolRegistry.getIfAvailable();
+        if (mcpRegistry != null) {
+            callbacks.addAll(mcpRegistry.toolCallbacks());
+        }
+        NodeSidecarPluginRuntime pluginRuntime = nodeSidecarPluginRuntimeProvider.getIfAvailable();
+        if (pluginRuntime != null) {
+            callbacks.addAll(pluginRuntime.toolCallbacks());
         }
         this.toolCallbacks = filterByPolicy(callbacks, toolPolicy);
     }

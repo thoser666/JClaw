@@ -8,6 +8,9 @@ import biz.brumm.domain.port.out.ToolPolicy;
 import biz.brumm.domain.service.AgentLoopLimitExceededException;
 import biz.brumm.infrastructure.adapter.out.ai.tool.CalculatorTool;
 import biz.brumm.infrastructure.adapter.out.ai.tool.DateTimeTool;
+import biz.brumm.infrastructure.adapter.out.plugin.NodeSidecarPluginRuntime;
+import biz.brumm.infrastructure.adapter.out.plugin.PluginToolCallback;
+import biz.brumm.infrastructure.sidecar.SidecarToolDescriptor;
 import biz.brumm.infrastructure.mcp.McpToolRegistry;
 import io.modelcontextprotocol.client.McpSyncClient;
 import io.modelcontextprotocol.spec.McpSchema;
@@ -57,6 +60,9 @@ class OllamaAiAdapterTest {
     @Mock
     private ObjectProvider<McpToolRegistry> mcpToolRegistryProvider;
 
+    @Mock
+    private ObjectProvider<NodeSidecarPluginRuntime> nodeSidecarPluginRuntimeProvider;
+
     private static final String TOOL_CALL_ID = "call_123";
 
     private OllamaAiAdapter adapter(List<AgentTool> tools) {
@@ -75,7 +81,7 @@ class OllamaAiAdapterTest {
         @SuppressWarnings("unchecked")
         ObjectProvider<biz.brumm.domain.service.CompactionService> compactionProvider = mock(ObjectProvider.class);
         when(compactionProvider.getIfAvailable()).thenReturn(null);
-        return new OllamaAiAdapter(chatModel, toolCallingManager, tools, mcpToolRegistryProvider, memory, policy, hookProvider, compactionProvider);
+        return new OllamaAiAdapter(chatModel, toolCallingManager, tools, mcpToolRegistryProvider, memory, policy, hookProvider, compactionProvider, nodeSidecarPluginRuntimeProvider);
     }
 
     private MessageWindowChatMemory newMemory() {
@@ -249,6 +255,24 @@ class OllamaAiAdapterTest {
     }
 
     @Test
+    void executeIncludesPluginToolCallbacksInPromptOptions() {
+        NodeSidecarPluginRuntime pluginRuntime = runtimeWithPluginTool();
+        when(nodeSidecarPluginRuntimeProvider.getIfAvailable()).thenReturn(pluginRuntime);
+        when(chatModel.call(any(Prompt.class))).thenReturn(finalResponse("fertig"));
+
+        OllamaAiAdapter adapter = adapter(List.of(new DateTimeTool()));
+        adapter.execute(new AgentCommand("Rechne 2+3", null), "System", 5);
+
+        ArgumentCaptor<Prompt> captor = ArgumentCaptor.forClass(Prompt.class);
+        verify(chatModel).call(captor.capture());
+        ToolCallingChatOptions options = (ToolCallingChatOptions) captor.getValue().getOptions();
+        List<String> names = options.getToolCallbacks().stream()
+                .map(callback -> callback.getToolDefinition().name())
+                .toList();
+        assertThat(names).containsExactly("getCurrentDateTime", "plugin-hello");
+    }
+
+    @Test
     void executeFiltersToolCallbacksAccordingToPolicy() {
         when(chatModel.call(any(Prompt.class))).thenReturn(finalResponse("fertig"));
 
@@ -300,6 +324,14 @@ class OllamaAiAdapterTest {
                 .build();
         when(client.listTools()).thenReturn(new McpSchema.ListToolsResult(List.of(addTool), null));
         return new McpToolRegistry(List.of(client));
+    }
+
+    private NodeSidecarPluginRuntime runtimeWithPluginTool() {
+        NodeSidecarPluginRuntime runtime = mock(NodeSidecarPluginRuntime.class);
+        SidecarToolDescriptor descriptor = new SidecarToolDescriptor("plugin-hello", "Gruesst", null);
+        when(runtime.toolCallbacks()).thenReturn(List.of(
+                new PluginToolCallback(descriptor, (name, args) -> "{\"reply\":\"Hallo\"}")));
+        return runtime;
     }
 
     private AssistantMessage toolCallMessage() {
