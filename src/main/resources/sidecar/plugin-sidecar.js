@@ -115,7 +115,16 @@ for (const name of Object.keys(staticTools)) {
   tools.set(name, { pluginId: null, name, ...staticTools[name] });
 }
 
-const HOOK_EVENTS = ['before_tool_call', 'after_tool_call'];
+const HOOK_EVENTS = [
+  'before_model_resolve', 'before_prompt_build', 'before_agent_run',
+  'before_agent_reply', 'before_agent_finalize', 'agent_end',
+  'before_tool_call', 'after_tool_call', 'tool_result_persist',
+  'message_received', 'message_sending', 'message_sent', 'reply_payload_sending',
+  'session_start', 'session_end',
+  'gateway_start', 'gateway_stop', 'cron_reconciled', 'cron_changed',
+  'before_install',
+  'skill_proposal_evaluate', 'skill_changed'
+];
 
 function send(message) {
   process.stdout.write(JSON.stringify(message) + '\n');

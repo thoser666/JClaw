@@ -202,6 +202,90 @@ class NodeSidecarPluginRuntimeTest {
 
     @Test
     @EnabledIf("nodeAvailable")
+    void fullHookEventCatalogSupportsAllModernStages() throws IOException {
+        Path pluginDir = pluginDir("catalog", "acme/catalog", """
+                module.exports = definePluginEntry({
+                  id: 'acme/catalog',
+                  name: 'Hook Katalog Demo',
+                  register(api) {
+                    api.registerTool({
+                      name: 'greet',
+                      description: 'Begrüßt jemanden.',
+                      parameters: {
+                        type: 'object',
+                        properties: { name: { type: 'string' } },
+                        required: ['name']
+                      },
+                      execute(args) { return { greeting: 'Hallo ' + args.name }; }
+                    });
+                    api.on('before_model_resolve', () => {});
+                    api.on('before_prompt_build', () => {});
+                    api.on('before_agent_run', () => {});
+                    api.on('before_agent_reply', () => {});
+                    api.on('before_agent_finalize', () => {});
+                    api.on('agent_end', () => {});
+                    api.on('before_tool_call', () => {});
+                    api.on('after_tool_call', () => {});
+                    api.on('tool_result_persist', () => {});
+                    api.on('message_received', () => {});
+                    api.on('message_sending', () => {});
+                    api.on('message_sent', () => {});
+                    api.on('reply_payload_sending', () => {});
+                    api.on('session_start', () => {});
+                    api.on('session_end', () => {});
+                    api.on('gateway_start', () => {});
+                    api.on('gateway_stop', () => {});
+                    api.on('cron_reconciled', () => {});
+                    api.on('cron_changed', () => {});
+                    api.on('before_install', () => {});
+                    api.on('skill_proposal_evaluate', () => {});
+                    api.on('skill_changed', () => {});
+                  }
+                });
+                """);
+
+        try (NodeSidecarPluginRuntime runtime = runtime(tempDir)) {
+            Optional<NodeSidecarPluginRuntime.PluginLoadReceipt> receipt = runtime.load(plugin(tempDir, "acme/catalog"));
+
+            assertThat(receipt).isPresent();
+            assertThat(receipt.orElseThrow().hooks())
+                    .extracting(NodeSidecarPluginRuntime.PluginHookRegistration::event)
+                    .containsExactlyInAnyOrder(
+                            "before_model_resolve", "before_prompt_build", "before_agent_run",
+                            "before_agent_reply", "before_agent_finalize", "agent_end",
+                            "before_tool_call", "after_tool_call", "tool_result_persist",
+                            "message_received", "message_sending", "message_sent", "reply_payload_sending",
+                            "session_start", "session_end",
+                            "gateway_start", "gateway_stop", "cron_reconciled", "cron_changed",
+                            "before_install",
+                            "skill_proposal_evaluate", "skill_changed");
+
+            JsonNode allowed = runtime.callTool("greet", objectMapper.createObjectNode().put("name", "Anna"));
+            assertThat(allowed.path("greeting").asString()).isEqualTo("Hallo Anna");
+        }
+    }
+
+    @Test
+    @EnabledIf("nodeAvailable")
+    void unknownHookEventIsRejectedByValidation() throws IOException {
+        Path pluginDir = pluginDir("badhook", "acme/badhook", """
+                module.exports = definePluginEntry({
+                  id: 'acme/badhook',
+                  name: 'Bad Hook Demo',
+                  register(api) {
+                    api.on('before_agent_start', () => {});
+                  }
+                });
+                """);
+
+        try (NodeSidecarPluginRuntime runtime = runtime(tempDir)) {
+            assertThatThrownBy(() -> runtime.load(plugin(tempDir, "acme/badhook")))
+                    .isInstanceOf(SidecarCallException.class);
+        }
+    }
+
+    @Test
+    @EnabledIf("nodeAvailable")
     void supportsDefineChannelPluginEntry() throws IOException {
         Path pluginDir = pluginDir("chan", "acme/chan", """
                 module.exports = defineChannelPluginEntry({
