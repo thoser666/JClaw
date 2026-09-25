@@ -95,8 +95,9 @@ public class NodeSidecarPluginRuntime implements Closeable {
         JsonNode receiptNode = bridge().loadPlugin(pluginId, source);
         PluginLoadReceipt receipt = parseReceipt(receiptNode);
         loadedIds.add(pluginId);
-        log.info("Plugin '{}' geladen: {} Tool(s), {} Command(s), {} Hook-Registrierung(en).",
-                pluginId, receipt.tools().size(), receipt.commands().size(), receipt.hooks().size());
+        log.info("Plugin '{}' geladen: {} Tool(s), {} Command(s), {} Channel(s), {} Hook-Registrierung(en).",
+                pluginId, receipt.tools().size(), receipt.commands().size(), receipt.channels().size(),
+                receipt.hooks().size());
         return Optional.of(receipt);
     }
 
@@ -130,6 +131,19 @@ public class NodeSidecarPluginRuntime implements Closeable {
     public JsonNode callTool(String name, JsonNode arguments)
             throws IOException, SidecarCallException, SidecarTimeoutException {
         return bridge().callTool(name, arguments);
+    }
+
+    /**
+     * Stellt eine eingehende Nachricht (Empfang) an einen vom Plugin registrierten Channel zu.
+     * <p>
+     * Analog zur {@code ChannelMessage.inbound}-Semantik der plattformnativen Adapter wird die
+     * Nachricht über dieselbe Bridge als {@code channel.deliver} an den {@code receive}-Handler
+     * des Plugins zugestellt; unbekannte Channels bzw. werfende Handler liefern einen
+     * strukturierten Fehler ({@code ERROR_CHANNEL_NOT_FOUND}/{@code ERROR_CHANNEL_EXECUTION}).
+     */
+    public JsonNode deliverChannelMessage(String channel, JsonNode message)
+            throws IOException, SidecarCallException, SidecarTimeoutException {
+        return bridge().deliverChannelMessage(channel, message);
     }
 
     /**
@@ -208,6 +222,13 @@ public class NodeSidecarPluginRuntime implements Closeable {
             commands.add(command.asString());
         }
 
+        List<PluginChannelRegistration> channels = new ArrayList<>();
+        for (JsonNode channel : receipt.path("channels")) {
+            channels.add(new PluginChannelRegistration(
+                    channel.path("name").asString(),
+                    channel.path("description").asString()));
+        }
+
         List<PluginHookRegistration> hooks = new ArrayList<>();
         for (JsonNode hook : receipt.path("hooks")) {
             hooks.add(new PluginHookRegistration(
@@ -215,18 +236,23 @@ public class NodeSidecarPluginRuntime implements Closeable {
                     hook.path("priority").asInt(0)));
         }
 
-        return new PluginLoadReceipt(id, name, tools, commands, hooks);
+        return new PluginLoadReceipt(id, name, tools, commands, channels, hooks);
     }
 
     /** Quittung von {@code plugin.load}: was das Plugin zur Laufzeit registriert hat. */
     public record PluginLoadReceipt(String id, String name,
                                     List<PluginToolRegistration> tools,
                                     List<String> commands,
+                                    List<PluginChannelRegistration> channels,
                                     List<PluginHookRegistration> hooks) {
     }
 
     /** Ein vom Plugin registriertes Tool (inkl. JSON-Schema der Parameter). */
     public record PluginToolRegistration(String name, String description, JsonNode parameters) {
+    }
+
+    /** Ein vom Plugin registrierter Empfangs-Channel ({@code name} + {@code description}). */
+    public record PluginChannelRegistration(String name, String description) {
     }
 
     /** Eine vom Plugin registrierte Hook-Registrierung ({@code event} + {@code priority}). */

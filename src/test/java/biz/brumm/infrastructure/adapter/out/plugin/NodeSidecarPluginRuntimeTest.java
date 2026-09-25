@@ -314,6 +314,82 @@ class NodeSidecarPluginRuntimeTest {
 
     @Test
     @EnabledIf("nodeAvailable")
+    void channelRuntimeDeliversInboundMessages() throws IOException {
+        Path pluginDir = pluginDir("chan-rec", "acme/chanrec", """
+                module.exports = defineChannelPluginEntry({
+                  id: 'acme/chanrec',
+                  name: 'Channel Runtime',
+                  register(api) {
+                    api.registerChannel({
+                      name: 'notifications',
+                      description: 'Benachrichtigungen empfangen.',
+                      receive(message) {
+                        return { received: message, upper: (message.text || '').toUpperCase() };
+                      }
+                    });
+                  }
+                });
+                """);
+
+        try (NodeSidecarPluginRuntime runtime = runtime(tempDir)) {
+            Optional<NodeSidecarPluginRuntime.PluginLoadReceipt> receipt = runtime.load(plugin(tempDir, "acme/chanrec"));
+
+            assertThat(receipt).isPresent();
+            assertThat(receipt.orElseThrow().channels())
+                    .extracting(NodeSidecarPluginRuntime.PluginChannelRegistration::name)
+                    .containsExactly("notifications");
+            assertThat(receipt.orElseThrow().channels().get(0).description())
+                    .isEqualTo("Benachrichtigungen empfangen.");
+
+            ObjectNode message = objectMapper.createObjectNode().put("text", "Hallo");
+            JsonNode delivered = runtime.deliverChannelMessage("notifications", message);
+            assertThat(delivered.path("received").path("text").asString()).isEqualTo("Hallo");
+            assertThat(delivered.path("upper").asString()).isEqualTo("HALLO");
+        }
+    }
+
+    @Test
+    @EnabledIf("nodeAvailable")
+    void channelRuntimeRejectsUnknownChannelAndFailingHandlers() throws IOException {
+        Path pluginDir = pluginDir("chan-bad", "acme/chanbad", """
+                module.exports = defineChannelPluginEntry({
+                  id: 'acme/chanbad',
+                  name: 'Channel Bad',
+                  register(api) {
+                    api.registerChannel({
+                      name: 'fragile',
+                      description: 'Wirft ab zehn.',
+                      receive(message) {
+                        if (message && message.text === 'boom') {
+                          throw new Error('Empfang gescheitert.');
+                        }
+                        return { ok: true };
+                      }
+                    });
+                  }
+                });
+                """);
+
+        try (NodeSidecarPluginRuntime runtime = runtime(tempDir)) {
+            runtime.load(plugin(tempDir, "acme/chanbad"));
+
+            assertThatThrownBy(() -> runtime.deliverChannelMessage("gibtsNicht", objectMapper.createObjectNode()))
+                    .isInstanceOf(SidecarCallException.class)
+                    .satisfies(e -> assertThat(((SidecarCallException) e).code())
+                            .isEqualTo(NodeSidecarBridge.ERROR_CHANNEL_NOT_FOUND))
+                    .hasMessageContaining("Unbekannter Channel");
+
+            assertThatThrownBy(() -> runtime.deliverChannelMessage("fragile",
+                    objectMapper.createObjectNode().put("text", "boom")))
+                    .isInstanceOf(SidecarCallException.class)
+                    .satisfies(e -> assertThat(((SidecarCallException) e).code())
+                            .isEqualTo(NodeSidecarBridge.ERROR_CHANNEL_EXECUTION))
+                    .hasMessageContaining("Empfang gescheitert");
+        }
+    }
+
+    @Test
+    @EnabledIf("nodeAvailable")
     void sourceWithoutEntryFailsValidation() throws IOException {
         Path pluginDir = pluginDir("bad", "acme/bad", "module.exports = { id: 'acme/bad', name: 'Bad' };");
 

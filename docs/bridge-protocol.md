@@ -133,13 +133,13 @@ Endet die stdout-Ausgabe ohne `close()` (Prozess gecrasht), werden alle in-fligh
 
 | Baustein | Zweck |
 |---|---|
-| `NodeSidecarBridge` | Verwaltete Bridge: `start(...)`, `ping()`, `info()`, `listTools()`, `callTool(name, args)`, `loadPlugin(id, source)`, `unloadPlugin(id)`, `restart()`, `close()` |
+| `NodeSidecarBridge` | Verwaltete Bridge: `start(...)`, `ping()`, `info()`, `listTools()`, `callTool(name, args)`, `loadPlugin(id, source)`, `unloadPlugin(id)`, `deliverChannelMessage(channel, message)`, `restart()`, `close()` |
 | `JsonRpcMessage` | Nachrichtenmodell (Request/Response/Error/Notification, strukturierte Fehler) |
 | `JsonRpcLineCodec` | NDJSON-Encoding/-Decoding (reines Framing, unit-getestet) |
 | `SidecarCallException` | Sidecar-Fehler mit JSON-RPC-Fehlercode |
 | `SidecarTimeoutException` | Call-/Ready-Timeout |
 | `SidecarToolDescriptor` | Tool-Registrierung (`name`, `description`, `parameters`) |
-| `NodeSidecarPluginRuntime` | Plugin-Laufzeit (P4-01): `load(Plugin)` â†’ Quittung (Tools/Commands/Hooks), `unload(id)`, `loadAvailable()`, `tools()`, `callTool(...)`, `close()` |
+| `NodeSidecarPluginRuntime` | Plugin-Laufzeit (P4-01): `load(Plugin)` â†’ Quittung (Tools/Commands/Channels/Hooks), `unload(id)`, `loadAvailable()`, `tools()`, `callTool(...)`, `deliverChannelMessage(channel, message)`, `close()` |
 | `EntryPointResolver` | Entry-AuflÃ¶sung eines Bundles (`package.json` â†’ `main`, Traversal-Schutz, dann `src/index.js` â€¦ `main.js`) |
 
 Testabdeckung (P1-03): `JsonRpcLineCodecTest` (Codec/Framing) und `NodeSidecarBridgeTest` (Integration mit echtem Node.js; Ã¼bersprungen, wenn Node nicht verfÃ¼gbar). Abgedeckt: Handshake, ping/info/listTools, Tool-Aufruf (Erfolg + Fehler), Method-NotFound, Call-Timeout, Restart (neue PID), Close, Aufruf nach Close/Restart-nach-Close.
@@ -179,10 +179,11 @@ module.exports = definePluginEntry({
 
 | Methode | Params | Ergebnis |
 |---|---|---|
-| `plugin.load` | `{id, source}` | Quittung `{id, name, tools:[{name, description, parameters}], commands:[String], hooks:[{event, priority}]}`; ESM-transpilierte Sources (`exports.default`) werden aufgelÃ¶st; `plugin` in vm-Sandbox ohne Zugriff auf `require`/`process` |
-| `plugin.unload` | `{id}` | `{id, removed}` â€” entfernt Tools/Commands/Hooks des Plugins (statische Referenz-Tools werden wiederhergestellt) |
+| `plugin.load` | `{id, source}` | Quittung `{id, name, tools:[{name, description, parameters}], commands:[String], channels:[{name, description}], hooks:[{event, priority}]}`; ESM-transpilierte Sources (`exports.default`) werden aufgelÃ¶st; `plugin` in vm-Sandbox ohne Zugriff auf `require`/`process` |
+| `plugin.unload` | `{id}` | `{id, removed}` â€” entfernt Tools/Commands/Channels/Hooks des Plugins (statische Referenz-Tools werden wiederhergestellt) |
+| `channel.deliver` | `{channel, message}` | Stellt eine eingehende Nachricht (`message`) an den `receive`-Handler des registrierten Channels zu (Empfang, P4-01): Ergebnis = Handler-Ergebnis; Fehler: `ERROR_CHANNEL_NOT_FOUND` (-32007, unbekannter Channel), `ERROR_CHANNEL_EXECUTION` (-32008, `receive()` warf) |
 
-`sidecar.listTools` liefert Referenz- + Plugin-Tools (Plugin-Tools mit `pluginId`). `tool.call` dispatched Ã¼ber die kombinierte Registry. Fehler: `ERROR_HOOK_BLOCKED` (-32005), `ERROR_PLUGIN_INVALID` (-32006, z. B. fehlende `definePluginEntry`/`register` oder Fehler in `register()`).
+`sidecar.listTools` liefert Referenz- + Plugin-Tools (Plugin-Tools mit `pluginId`). `tool.call` dispatched Ã¼ber die kombinierte Registry. Fehler: `ERROR_HOOK_BLOCKED` (-32005), `ERROR_PLUGIN_INVALID` (-32006, z. B. fehlende `definePluginEntry`/`register` oder Fehler in `register()`), `ERROR_CHANNEL_NOT_FOUND` (-32007), `ERROR_CHANNEL_EXECUTION` (-32008).
 
 ### Entry-AuflÃ¶sung (Java)
 
@@ -196,6 +197,6 @@ module.exports = definePluginEntry({
 
 - **Tool-Schema â†’ Spring-AI:** `parameters` (JSON-Schema) bislang roher Knoten (`SidecarToolDescriptor.parameters()`); Anbindung an das Spring-AI-Tool-Calling (`@Tool`, `JsonSchema`) **umgesetzt (hermetisches Binding, P4-01):** `PluginToolCallback` (Spring-AI-1.0-{@link ToolCallback}, record `SidecarToolDescriptor` + `BiFunction<String,String,String>`-Dispatcher) exponiert `getToolDefinition()` (DefaultToolDefinition; `inputSchema` aus `descriptor.parameters()` mit Fallback `{"type":"object","properties":{}}` bei `null`) und dispatched `call(String)`; **Umgesetzt (P4-01, hermetisch):** der Spring-AI-Merge in den Agent-Callback-Listen (mirroring `McpToolRegistry`) ist grün, PluginToolCallbacks aus `NodeSidecarPluginRuntime.toolCallbacks()` flieÃŸen (Spiegel-Test 743) &mdash; siehe Abschnitt 8 + ADR.
 - **npm/TypeScript-Bundles:** `definePluginEntry`-Shim + CommonJS sind die **Referenz-Laufzeit**; echte OpenClaw-Bundles (ESM-TypeScript, `openclaw/plugin-sdk`-Imports) benÃ¶tigen npm-AuflÃ¶sung/Bundling â€” gegen den neuen SDK-Stand (Subpath-Imports, moderne Hook-Stages, `setup`-Deskriptoren).
-- **Hooks/Channels:** **Voll-Hook-Katalog (P1-11) umgesetzt (hermetisches Binding, Spiegel-Test 744 grün):** `HOOK_EVENTS` enthält alle modernen SDK-Stages (`openclaw-compat.md` §3: Agent-Turn, Tools inkl. `tool_result_persist`, Messages, Sessions, Lifecycle inkl. `cron_reconciled`/`cron_changed`, Installs, Skills; `before_agent_start`/SDK-Root-Imports bleiben seit 2026.6.34 entfernt und werden abgelehnt); die `before_tool_call`/`after_tool_call`-Hooks laufen weiter aus. Die Channel-Runtime (`defineChannelPluginEntry`, Empfang) läuft über dieselbe Bridge, Ausführung folgt.
+- **Hooks/Channels:** **Voll-Hook-Katalog (P1-11) umgesetzt (hermetisches Binding, Spiegel-Test 744 grün):** `HOOK_EVENTS` enthält alle modernen SDK-Stages (`openclaw-compat.md` §3: Agent-Turn, Tools inkl. `tool_result_persist`, Messages, Sessions, Lifecycle inkl. `cron_reconciled`/`cron_changed`, Installs, Skills; `before_agent_start`/SDK-Root-Imports bleiben seit 2026.6.34 entfernt und werden abgelehnt); die `before_tool_call`/`after_tool_call`-Hooks laufen weiter aus. **Channel-Runtime (P4-01) umgesetzt (hermetisches Binding, Spiegel-Test 746 grün):** `defineChannelPluginEntry`-Plugins registrieren Empfangs-Channels über `api.registerChannel({name, description, receive})` (Quittung `{name, description}`, unload entfernt sie); der Java-Kern stellt eingehende Nachrichten (analog `ChannelMessage.inbound`) über dieselbe Bridge als `channel.deliver` an den `receive`-Handler zu (Fehler: `ERROR_CHANNEL_NOT_FOUND` -32007, `ERROR_CHANNEL_EXECUTION` -32008).
 - **Backpressure/ParallelitÃ¤t:** Bisher eine Antwort pro Request (id-basiert); keine Limits fÃ¼r gleichzeitige Aufrufe definiert.
 - **Stderr-Auswertung:** Bisher nur Log; bei Startfehlern (fehlendes npm-Modul) kÃ¶nnte stderr gezielt in die Fehlermeldung flieÃŸen.

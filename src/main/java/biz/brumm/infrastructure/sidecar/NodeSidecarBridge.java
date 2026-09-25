@@ -49,6 +49,7 @@ public class NodeSidecarBridge implements Closeable {
     public static final String METHOD_CALL_TOOL = "tool.call";
     public static final String METHOD_PLUGIN_LOAD = "plugin.load";
     public static final String METHOD_PLUGIN_UNLOAD = "plugin.unload";
+    public static final String METHOD_CHANNEL_DELIVER = "channel.deliver";
 
     public static final int ERROR_METHOD_NOT_FOUND = -32601;
     public static final int ERROR_TOOL_NOT_FOUND = -32001;
@@ -57,6 +58,8 @@ public class NodeSidecarBridge implements Closeable {
     public static final int ERROR_TIMEOUT = -32004;
     public static final int ERROR_HOOK_BLOCKED = -32005;
     public static final int ERROR_PLUGIN_INVALID = -32006;
+    public static final int ERROR_CHANNEL_NOT_FOUND = -32007;
+    public static final int ERROR_CHANNEL_EXECUTION = -32008;
 
     public static final long DEFAULT_CALL_TIMEOUT_MILLIS = 15_000;
     public static final long DEFAULT_READY_TIMEOUT_MILLIS = 5_000;
@@ -180,6 +183,21 @@ public class NodeSidecarBridge implements Closeable {
         ObjectNode params = objectMapper.createObjectNode();
         params.put("id", id);
         return execute(METHOD_PLUGIN_UNLOAD, params);
+    }
+
+    /**
+     * Stellt eine eingehende Nachricht an ein Channel-Plugin zu (`api.registerChannel(...)`,
+     * Empfang über {@code channel.deliver}). Liefert das Ergebnis des {@code receive}-Handlers
+     * oder einen strukturierten Fehler ({@link #ERROR_CHANNEL_NOT_FOUND}/{@link #ERROR_CHANNEL_EXECUTION}).
+     */
+    public JsonNode deliverChannelMessage(String channel, JsonNode message)
+            throws IOException, SidecarCallException, SidecarTimeoutException {
+        ObjectNode params = objectMapper.createObjectNode();
+        params.put("channel", channel);
+        if (message != null) {
+            params.set("message", message);
+        }
+        return execute(METHOD_CHANNEL_DELIVER, params);
     }
 
     /** Beendet den laufenden Prozess und startet einen neuen (Handshake inklusive). */

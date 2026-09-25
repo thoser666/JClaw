@@ -29,8 +29,10 @@
 //     }
 //   });
 //
-// Channel-Plugins nutzen defineChannelPluginEntry mit derselben register(api)-Signatur;
-// das eigentliche Channel-Runtime-Verhalten (Empfangs-Loops) folgt in späteren Stufen.
+// Channel-Plugins (defineChannelPluginEntry) registrieren ihre Channels über
+// api.registerChannel({ name, description, receive }); eingehende Nachrichten stellt der
+// Java-Kern über die JSON-RPC-Methode channel.deliver an die receive-Handler zu (Empfang
+// über dieselbe Bridge; Fehler: ERROR_CHANNEL_NOT_FOUND / ERROR_CHANNEL_EXECUTION).
 //
 // Fehlercodes: siehe NodeSidecarBridge (ERROR_*).
 
@@ -45,6 +47,8 @@ const ERROR_TOOL_EXECUTION = -32002;
 const ERROR_INTERNAL = -32003;
 const ERROR_HOOK_BLOCKED = -32005;
 const ERROR_PLUGIN_INVALID = -32006;
+const ERROR_CHANNEL_NOT_FOUND = -32007;
+const ERROR_CHANNEL_EXECUTION = -32008;
 
 const SIDECAR_NAME = 'jclaw-plugin-sidecar';
 const SIDECAR_VERSION = '1.0.0';
@@ -108,8 +112,9 @@ const staticTools = {
 // `restoreStaticTool`).
 const tools = new Map();    // name -> { pluginId, description, parameters, outputSchema, run }
 const commands = new Map(); // name -> { pluginId, description, run }
+const channels = new Map(); // name -> { pluginId, name, description, receive }
 const hooks = [];           // { pluginId, event, handler, matcher, priority }
-const plugins = new Map();  // id -> { id, name, tools: [], commands: [], hooks: [] }
+const plugins = new Map();  // id -> { id, name, tools: [], commands: [], channels: [], hooks: [] }
 
 for (const name of Object.keys(staticTools)) {
   tools.set(name, { pluginId: null, name, ...staticTools[name] });
@@ -185,6 +190,12 @@ function unloadById(id) {
       commands.delete(name);
     }
   }
+  for (const name of plugin.channels) {
+    const current = channels.get(name);
+    if (current && current.pluginId === id) {
+      channels.delete(name);
+    }
+  }
   for (const hook of plugin.hooks) {
     const index = hooks.indexOf(hook);
     if (index >= 0) {
@@ -215,6 +226,16 @@ function createPluginApi(id) {
       const plugin = plugins.get(id);
       if (!plugin.commands.includes(name)) {
         plugin.commands.push(name);
+      }
+    },
+    registerChannel({ name, description, receive }) {
+      if (typeof name !== 'string' || name.length === 0 || typeof receive !== 'function') {
+        throw new Error('registerChannel benötigt name (String) und receive (Funktion).');
+      }
+      channels.set(name, { pluginId: id, name, description, receive });
+      const plugin = plugins.get(id);
+      if (!plugin.channels.includes(name)) {
+        plugin.channels.push(name);
       }
     },
     on(event, handler, options) {
@@ -278,7 +299,7 @@ function loadPlugin(req) {
     return;
   }
 
-  plugins.set(id, { id, name: entry.name || id, tools: [], commands: [], hooks: [] });
+  plugins.set(id, { id, name: entry.name || id, tools: [], commands: [], channels: [], hooks: [] });
   const api = createPluginApi(id);
   try {
     entry.register(api);
@@ -293,12 +314,17 @@ function loadPlugin(req) {
     const tool = tools.get(name);
     return { name, description: tool.description, parameters: tool.parameters };
   });
+  const registeredChannels = plugin.channels.map((name) => {
+    const channel = channels.get(name);
+    return { name, description: channel.description };
+  });
   sendResult(req.id, {
     id,
     name: plugin.name,
     tools: registeredTools,
     commands: plugin.commands.slice(),
-    hooks: plugin.hooks.map((hook) => ({ event: hook.event, priority: hook.priority }))
+    hooks: plugin.hooks.map((hook) => ({ event: hook.event, priority: hook.priority })),
+    channels: registeredChannels
   });
 }
 
@@ -348,6 +374,27 @@ function callTool(req) {
   sendResult(req.id, result);
 }
 
+function deliverChannel(req) {
+  const name = req.params && req.params.channel;
+  const message = (req.params && req.params.message) || {};
+  const channel = channels.get(name);
+  if (!channel) {
+    sendError(req.id, ERROR_CHANNEL_NOT_FOUND, 'Unbekannter Channel: ' + name);
+    return;
+  }
+
+  let result;
+  try {
+    result = channel.receive(message);
+  } catch (err) {
+    sendError(req.id, ERROR_CHANNEL_EXECUTION,
+        "receive()-Handler des Channels '" + name + "' warf: " + (err.message || String(err)));
+    return;
+  }
+
+  sendResult(req.id, result !== undefined ? result : { delivered: true });
+}
+
 function handleRequest(req) {
   switch (req.method) {
     case 'sidecar.ping':
@@ -373,6 +420,9 @@ function handleRequest(req) {
       return;
     case 'plugin.unload':
       unloadPlugin(req);
+      return;
+    case 'channel.deliver':
+      deliverChannel(req);
       return;
     case 'tool.call':
       callTool(req);
