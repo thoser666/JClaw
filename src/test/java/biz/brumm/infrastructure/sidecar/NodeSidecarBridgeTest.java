@@ -8,6 +8,9 @@ import tools.jackson.databind.node.ObjectNode;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -167,6 +170,60 @@ class NodeSidecarBridgeTest {
         assertThatThrownBy(bridge::restart)
                 .isInstanceOf(IOException.class)
                 .hasMessageContaining("Neustart");
+    }
+
+    @Test
+    @EnabledIf("nodeAvailable")
+    void concurrentCallsWithinLimitAllSucceed() throws Exception {
+        try (NodeSidecarBridge bridge = NodeSidecarBridge.start(NodeSidecarBridge.defaultScript(), objectMapper, 5_000, 5_000, 4, 5_000)) {
+            ExecutorService pool = Executors.newFixedThreadPool(4);
+            try {
+                List<Future<JsonNode>> futures = pool.invokeAll(List.of(
+                        () -> add(bridge, 1, 1), () -> add(bridge, 10, 20),
+                        () -> add(bridge, 100, 200), () -> add(bridge, 7, 3)));
+                assertThat(futures).allSatisfy(f -> {
+                    try {
+                        assertThat(f.get(10, TimeUnit.SECONDS).path("result").asInt()).isPositive();
+                    } catch (Exception e) {
+                        throw new AssertionError("Parallel-Aufruf fehlgeschlagen", e);
+                    }
+                });
+            } finally {
+                pool.shutdownNow();
+            }
+        }
+    }
+
+    @Test
+    @EnabledIf("nodeAvailable")
+    void callBeyondConcurrencyLimitIsRejectedWithBusyError() throws Exception {
+        try (NodeSidecarBridge bridge = NodeSidecarBridge.start(NodeSidecarBridge.defaultScript(), objectMapper, 5_000, 5_000, 2, 200)) {
+            ExecutorService pool = Executors.newFixedThreadPool(4);
+            try {
+                Future<JsonNode> blockerA = pool.submit(() -> sleep(bridge, 800));
+                Future<JsonNode> blockerB = pool.submit(() -> sleep(bridge, 800));
+                Thread.sleep(300); // beide Slots sicher durch die Blocker belegt
+
+                // Beide Slots sind belegt; ein dritter Aufruf wird nach 200 ms Wartefenster abgewiesen.
+                assertThatThrownBy(() -> bridge.callTool("sleep", objectMapper.createObjectNode().put("ms", 10)))
+                        .isInstanceOf(SidecarCallException.class)
+                        .satisfies(e -> assertThat(((SidecarCallException) e).code())
+                                .isEqualTo(NodeSidecarBridge.ERROR_BUSY));
+
+                assertThat(blockerA.get(10, TimeUnit.SECONDS).path("sleptMs").asInt()).isEqualTo(800);
+                assertThat(blockerB.get(10, TimeUnit.SECONDS).path("sleptMs").asInt()).isEqualTo(800);
+            } finally {
+                pool.shutdownNow();
+            }
+        }
+    }
+
+    private static JsonNode add(NodeSidecarBridge bridge, int a, int b) throws Exception {
+        return bridge.callTool("add", new ObjectMapper().createObjectNode().put("a", a).put("b", b));
+    }
+
+    private static JsonNode sleep(NodeSidecarBridge bridge, int ms) throws Exception {
+        return bridge.callTool("sleep", new ObjectMapper().createObjectNode().put("ms", ms));
     }
 
     private static boolean nodeAvailable() {

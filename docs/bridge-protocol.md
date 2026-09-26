@@ -105,8 +105,9 @@ Konstanten in `NodeSidecarBridge` (`ERROR_*`):
 | `-32002` | `ERROR_TOOL_EXECUTION` | Fehler in der Tool-AusfÃ¼hrung (`run` warf) |
 | `-32003` | `ERROR_INTERNAL` | Interner Sidecar-Fehler beim Bearbeiten der Anfrage |
 | `-32004` | `ERROR_TIMEOUT` | Vom **Kern** erzeugt (kein Sidecar-Fehler) â€” Aufruf Ã¼berschritt das Call-Timeout |
+| `-32009` | `ERROR_BUSY` | Vom **Kern** erzeugt (Backpressure) â€” maximal `DEFAULT_MAX_CONCURRENT_REQUESTS` gleichzeitige In-Flight-Requests; kein Slot innerhalb des Wartefensters frei |
 
-`-32004` ist kein JSON-RPC-Standardcode; er wird in `SidecarTimeoutException` Ã¼bersetzt. Sidecar-seitige Fehler werden als `SidecarCallException(code, message, method)` geworfen.
+`-32004` ist kein JSON-RPC-Standardcode; er wird in `SidecarTimeoutException` Ã¼bersetzt. Sidecar-seitige Fehler werden als `SidecarCallException(code, message, method)` geworfen. `-32009` (`ERROR_BUSY`) wird ebenfalls als `SidecarCallException` geworfen â€” Backpressure des Kerns, wenn mehr gleichzeitige Aufrufe eintreffen als erlaubt (siehe Â§6).
 
 ## 6. Lebenszyklus
 
@@ -119,6 +120,7 @@ Konstanten in `NodeSidecarBridge` (`ERROR_*`):
 1. Kern sendet Request mit neuer id Ã¼ber stdin.
 2. Reader-Thread des Kerns entscheidet Antworten Ã¼ber die id; Notifications/Requests des Sidecars werden nicht als Antworten behandelt.
 3. Erfolg â†’ `result`; strukturierter Fehler â†’ `SidecarCallException`; keine Antwort in **15 s** (Default Call-Timeout) â†’ `SidecarTimeoutException`.
+4. **Backpressure:** Maximal `DEFAULT_MAX_CONCURRENT_REQUESTS` (**8**) gleichzeitige In-Flight-Requests (fairer Semaphore, FIFO). Ist das Limit erreicht, wartet ein neuer Aufruf bis zu `DEFAULT_BACKPRESSURE_WAIT_MILLIS` (**5 s**) auf einen freien Slot â€” danach `SidecarCallException` mit `ERROR_BUSY` (-32009) statt unbeschrÃ¤nkter Queue. Konfigurierbar Ã¼ber `start(..., maxConcurrentRequests, backpressureWaitMillis)`.
 
 ### Neustart (`restart()`)
 Beendet den laufenden Prozess (Graceful-Shutdown, 5 s, danach `destroyForcibly()`), startet einen neuen Prozess inkl. Handshake. In-flight-Aufrufe scheitern mit `IOException`.
@@ -133,7 +135,7 @@ Endet die stdout-Ausgabe ohne `close()` (Prozess gecrasht), werden alle in-fligh
 
 | Baustein | Zweck |
 |---|---|
-| `NodeSidecarBridge` | Verwaltete Bridge: `start(...)`, `ping()`, `info()`, `listTools()`, `callTool(name, args)`, `loadPlugin(id, source)`, `unloadPlugin(id)`, `deliverChannelMessage(channel, message)`, `restart()`, `close()` |
+| `NodeSidecarBridge` | Verwaltete Bridge: `start(...)`, `ping()`, `info()`, `listTools()`, `callTool(name, args)`, `loadPlugin(id, source)`, `unloadPlugin(id)`, `deliverChannelMessage(channel, message)`, `restart()`, `close()`; Backpressure (Semaphore): `DEFAULT_MAX_CONCURRENT_REQUESTS`=8, `DEFAULT_BACKPRESSURE_WAIT_MILLIS`=5 s, `ERROR_BUSY` bei Ãœberlast |
 | `JsonRpcMessage` | Nachrichtenmodell (Request/Response/Error/Notification, strukturierte Fehler) |
 | `JsonRpcLineCodec` | NDJSON-Encoding/-Decoding (reines Framing, unit-getestet) |
 | `SidecarCallException` | Sidecar-Fehler mit JSON-RPC-Fehlercode |
@@ -198,5 +200,5 @@ module.exports = definePluginEntry({
 - **Tool-Schema â†’ Spring-AI:** `parameters` (JSON-Schema) bislang roher Knoten (`SidecarToolDescriptor.parameters()`); Anbindung an das Spring-AI-Tool-Calling (`@Tool`, `JsonSchema`) **umgesetzt (hermetisches Binding, P4-01):** `PluginToolCallback` (Spring-AI-1.0-{@link ToolCallback}, record `SidecarToolDescriptor` + `BiFunction<String,String,String>`-Dispatcher) exponiert `getToolDefinition()` (DefaultToolDefinition; `inputSchema` aus `descriptor.parameters()` mit Fallback `{"type":"object","properties":{}}` bei `null`) und dispatched `call(String)`; **Umgesetzt (P4-01, hermetisch):** der Spring-AI-Merge in den Agent-Callback-Listen (mirroring `McpToolRegistry`) ist grün, PluginToolCallbacks aus `NodeSidecarPluginRuntime.toolCallbacks()` flieÃŸen (Spiegel-Test 743) &mdash; siehe Abschnitt 8 + ADR.
 - **npm/TypeScript-Bundles:** `definePluginEntry`-Shim + CommonJS sind die **Referenz-Laufzeit**; echte OpenClaw-Bundles (ESM-TypeScript, `openclaw/plugin-sdk`-Imports) benÃ¶tigen npm-AuflÃ¶sung/Bundling â€” gegen den neuen SDK-Stand (Subpath-Imports, moderne Hook-Stages, `setup`-Deskriptoren).
 - **Hooks/Channels:** **Voll-Hook-Katalog (P1-11) umgesetzt (hermetisches Binding, Spiegel-Test 744 grün):** `HOOK_EVENTS` enthält alle modernen SDK-Stages (`openclaw-compat.md` §3: Agent-Turn, Tools inkl. `tool_result_persist`, Messages, Sessions, Lifecycle inkl. `cron_reconciled`/`cron_changed`, Installs, Skills; `before_agent_start`/SDK-Root-Imports bleiben seit 2026.6.34 entfernt und werden abgelehnt); die `before_tool_call`/`after_tool_call`-Hooks laufen weiter aus. **Channel-Runtime (P4-01) umgesetzt (hermetisches Binding, Spiegel-Test 746 grün):** `defineChannelPluginEntry`-Plugins registrieren Empfangs-Channels über `api.registerChannel({name, description, receive})` (Quittung `{name, description}`, unload entfernt sie); der Java-Kern stellt eingehende Nachrichten (analog `ChannelMessage.inbound`) über dieselbe Bridge als `channel.deliver` an den `receive`-Handler zu (Fehler: `ERROR_CHANNEL_NOT_FOUND` -32007, `ERROR_CHANNEL_EXECUTION` -32008).
-- **Backpressure/ParallelitÃ¤t:** Bisher eine Antwort pro Request (id-basiert); keine Limits fÃ¼r gleichzeitige Aufrufe definiert.
+- **Backpressure/Parallelität:** **umgesetzt (hermetisches Binding, Spiegel-Test 749 grün):** die Bridge bleibt id-basiert (Eine-Antwort-pro-Request), begrenzt aber gleichzeitige In-Flight-Requests je Sidecar über einen fairen Semaphore auf `NodeSidecarBridge.DEFAULT_MAX_CONCURRENT_REQUESTS` (**8**, Default `maxConcurrentRequests`); ein Aufruf, dessen Slot nicht innerhalb von `DEFAULT_BACKPRESSURE_WAIT_MILLIS` (**5 s**) frei wird, scheitert mit `ERROR_BUSY` (-32009 `SidecarCallException`) statt unbegrenzt zu warten; stdio-Schreibzugriffe sind serialisiert (parallele Aufrufer teilen sich dieselbe stdin-Pipe). Konfigurierbar über `NodeSidecarBridge.start(...)`; Tests: Burst bis zum Limit (Spiegel-Test 748) und Ablehnung darüber (Spiegel-Test 749).
 - **Stderr-Auswertung:** Bisher nur Log; bei Startfehlern (fehlendes npm-Modul) kÃ¶nnte stderr gezielt in die Fehlermeldung flieÃŸen.

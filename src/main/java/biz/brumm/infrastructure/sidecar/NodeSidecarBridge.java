@@ -24,6 +24,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -60,9 +61,14 @@ public class NodeSidecarBridge implements Closeable {
     public static final int ERROR_PLUGIN_INVALID = -32006;
     public static final int ERROR_CHANNEL_NOT_FOUND = -32007;
     public static final int ERROR_CHANNEL_EXECUTION = -32008;
+    public static final int ERROR_BUSY = -32009;
 
     public static final long DEFAULT_CALL_TIMEOUT_MILLIS = 15_000;
     public static final long DEFAULT_READY_TIMEOUT_MILLIS = 5_000;
+    /** Maximale gleichzeitig in-flight JSON-RPC-Requests an den Sidecar (Backpressure). */
+    public static final int DEFAULT_MAX_CONCURRENT_REQUESTS = 8;
+    /** Wie lange ein Aufruf auf einen freien Slot wartet, bevor er mit {@code ERROR_BUSY} abgewiesen wird. */
+    public static final long DEFAULT_BACKPRESSURE_WAIT_MILLIS = 5_000;
 
     private static final long PROCESS_STOP_TIMEOUT_SECONDS = 5;
 
@@ -73,6 +79,9 @@ public class NodeSidecarBridge implements Closeable {
     private final String script;
     private final long callTimeoutMillis;
     private final long readyTimeoutMillis;
+    private final int maxConcurrentRequests;
+    private final long backpressureWaitMillis;
+    private final Semaphore requestSlot; // Backpressure: begrenzt gleichzeitige In-Flight-Requests
 
     private final AtomicBoolean closed = new AtomicBoolean();
     private final AtomicLong nextId = new AtomicLong(1);
@@ -85,12 +94,16 @@ public class NodeSidecarBridge implements Closeable {
     private volatile JsonNode readyInfo;
     private volatile Path scriptFile;
 
-    private NodeSidecarBridge(String script, ObjectMapper objectMapper, long callTimeoutMillis, long readyTimeoutMillis) {
+    private NodeSidecarBridge(String script, ObjectMapper objectMapper, long callTimeoutMillis, long readyTimeoutMillis,
+                              int maxConcurrentRequests, long backpressureWaitMillis) {
         this.script = script;
         this.objectMapper = objectMapper;
         this.codec = new JsonRpcLineCodec(objectMapper);
         this.callTimeoutMillis = callTimeoutMillis;
         this.readyTimeoutMillis = readyTimeoutMillis;
+        this.maxConcurrentRequests = maxConcurrentRequests;
+        this.backpressureWaitMillis = backpressureWaitMillis;
+        this.requestSlot = new Semaphore(maxConcurrentRequests, true); // fair: FIFO-Reihenfolge beim Warten
     }
 
     /** Lädt das mitgelieferte Referenz-Sidecar ({@code sidecar/protocol-sidecar.js}) vom Classpath. */
@@ -124,7 +137,16 @@ public class NodeSidecarBridge implements Closeable {
 
     public static NodeSidecarBridge start(String script, ObjectMapper objectMapper, long callTimeoutMillis, long readyTimeoutMillis)
             throws IOException {
-        NodeSidecarBridge bridge = new NodeSidecarBridge(script, objectMapper, callTimeoutMillis, readyTimeoutMillis);
+        return start(script, objectMapper, callTimeoutMillis, readyTimeoutMillis,
+                DEFAULT_MAX_CONCURRENT_REQUESTS, DEFAULT_BACKPRESSURE_WAIT_MILLIS);
+    }
+
+    /** Startet mit konfigurierbarem Backpressure: max {@code maxConcurrentRequests} In-Flight-Requests. */
+    public static NodeSidecarBridge start(String script, ObjectMapper objectMapper, long callTimeoutMillis,
+                                          long readyTimeoutMillis, int maxConcurrentRequests, long backpressureWaitMillis)
+            throws IOException {
+        NodeSidecarBridge bridge = new NodeSidecarBridge(
+                script, objectMapper, callTimeoutMillis, readyTimeoutMillis, maxConcurrentRequests, backpressureWaitMillis);
         bridge.startProcess();
         return bridge;
     }
@@ -220,21 +242,48 @@ public class NodeSidecarBridge implements Closeable {
     JsonNode execute(String method, JsonNode params) throws IOException, SidecarCallException, SidecarTimeoutException {
         ensureRunning();
         long id = nextId.getAndIncrement();
+        if (!acquireSlot(method)) {
+            throw new SidecarCallException(ERROR_BUSY,
+                    "Der Node-Sidecar ist überlastet: maximal " + maxConcurrentRequests
+                            + " gleichzeitige Aufrufe erlaubt, kein Slot innerhalb von "
+                            + backpressureWaitMillis + " ms frei geworden.",
+                    method);
+        }
         CompletableFuture<JsonRpcMessage> future = new CompletableFuture<>();
         pending.put(id, future);
         try {
-            stdin.write(codec.encode(JsonRpcMessage.request(id, method, params)));
-            stdin.flush();
+            synchronized (stdin) {
+                stdin.write(codec.encode(JsonRpcMessage.request(id, method, params)));
+                stdin.flush();
+            }
         } catch (IOException e) {
             pending.remove(id);
+            requestSlot.release();
             throw new IOException("Sidecar-Aufruf '" + method + "' konnte nicht gesendet werden: " + e.getMessage(), e);
         }
 
-        JsonRpcMessage response = awaitResponse(method, id, future);
-        if (response.error() != null) {
-            throw new SidecarCallException(response.errorCode(), response.errorMessage(), method);
+        try {
+            JsonRpcMessage response = awaitResponse(method, id, future);
+            if (response.error() != null) {
+                throw new SidecarCallException(response.errorCode(), response.errorMessage(), method);
+            }
+            return response.result();
+        } finally {
+            requestSlot.release();
         }
-        return response.result();
+    }
+
+    /**
+     * Erwirbt einen In-Flight-Slot mit Wartefenster (Backpressure). Gibt {@code false} zurück,
+     * wenn innerhalb von {@link #backpressureWaitMillis} kein Slot frei wurde.
+     */
+    private boolean acquireSlot(String method) throws IOException {
+        try {
+            return requestSlot.tryAcquire(backpressureWaitMillis, TimeUnit.MILLISECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IOException("Unterbrochen während Slot-Wartezeit für Sidecar-Aufruf '" + method + "'.", e);
+        }
     }
 
     private JsonRpcMessage awaitResponse(String method, long id, CompletableFuture<JsonRpcMessage> future)
