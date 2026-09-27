@@ -22,7 +22,7 @@ Der Java-Kern kommuniziert mit einem externen **Node.js-Sidecar-Prozess** Ã¼be
 |---|---|
 | Protokoll | JSON-RPC 2.0 |
 | Framing | **Newline-delimited JSON (NDJSON)** â€” genau eine Nachricht pro Zeile, abgeschlossen mit `\n` |
-| KanÃ¤le | Anfragen/Antworten Ã¼ber **stdin/stdout**; stderr nur fÃ¼r Logs (wird gedrained, nie geparst) |
+| Kanäle | Anfragen/Antworten über **stdin/stdout**; stderr nur für Logs (wird gedrained, nie als Protokoll geparst) — bei Start-/Crashfehlern fließen die gesammelten stderr-Zeilen in die Fehlermeldung |
 | Zeichenkodierung | UTF-8 |
 | IDs | Numerisch, vom Kern vergeben, monoton steigend; Notifications ohne gÃ¼ltige id (`id < 0`) |
 | ZeilenlÃ¤nge | Kein hartes Limit; ein Frame = eine Zeile |
@@ -114,7 +114,7 @@ Konstanten in `NodeSidecarBridge` (`ERROR_*`):
 ### Start
 1. Kern startet `node -e <script>` (Referenz-Script Ã¼ber `NodeSidecarBridge.defaultScript()`).
 2. Kern wartet auf die `sidecar.ready`-Notification (Ready-Timeout, Default **5 s**).
-3. LÃ¤uft das Timeout ab â†’ Prozess wird beendet, `SidecarTimeoutException`.
+3. LÃ¤uft das Timeout ab â†’ Prozess wird beendet, `SidecarTimeoutException`. Die bis dahin auf stderr gesammelten Zeilen (z. B. fehlendes Modul, Syntaxfehler) werden in die Fehlermeldung einbezogen (max. 20 Zeilen).
 
 ### Aufruf
 1. Kern sendet Request mit neuer id Ã¼ber stdin.
@@ -129,17 +129,17 @@ Beendet den laufenden Prozess (Graceful-Shutdown, 5 s, danach `destroyForcibly()
 SchlieÃŸt stdin (â†’ Sidecar beendet sich selbst), destruiert bei Bedarf den Prozess (5 s, dann `destroyForcibly()`). Idempotent; Aufrufe danach scheitern sofort mit `IOException`.
 
 ### Crash-Verhalten
-Endet die stdout-Ausgabe ohne `close()` (Prozess gecrasht), werden alle in-flight-Aufrufe mit `IOException` beendet und ein WARN geloggt. **Kein** automatischer Neustart â€” dieser erfolgt explizit Ã¼ber `restart()`.
+Endet die stdout-Ausgabe ohne `close()` (Prozess gecrasht), werden alle in-flight-Aufrufe mit `IOException` beendet und ein WARN geloggt; die gesammelten stderr-Zeilen (max. 20) werden in die `IOException` einbezogen. **Kein** automatischer Neustart â€” dieser erfolgt explizit Ã¼ber `restart()`.
 
 ## 7. Java-Referenz
 
 | Baustein | Zweck |
 |---|---|
-| `NodeSidecarBridge` | Verwaltete Bridge: `start(...)`, `ping()`, `info()`, `listTools()`, `callTool(name, args)`, `loadPlugin(id, source)`, `unloadPlugin(id)`, `deliverChannelMessage(channel, message)`, `restart()`, `close()`; Backpressure (Semaphore): `DEFAULT_MAX_CONCURRENT_REQUESTS`=8, `DEFAULT_BACKPRESSURE_WAIT_MILLIS`=5 s, `ERROR_BUSY` bei Ãœberlast |
+| `NodeSidecarBridge` | Verwaltete Bridge: `start(...)`, `ping()`, `info()`, `listTools()`, `callTool(name, args)`, `loadPlugin(id, source)`, `unloadPlugin(id)`, `deliverChannelMessage(channel, message)`, `restart()`, `close()`; Backpressure (Semaphore): `DEFAULT_MAX_CONCURRENT_REQUESTS`=8, `DEFAULT_BACKPRESSURE_WAIT_MILLIS`=5 s, `ERROR_BUSY` bei Ãœberlast; sammelt stderr (max. 20 Zeilen) pro Prozesslauf und bettet es bei Start-/Crashfehlern in die Fehlermeldung ein |
 | `JsonRpcMessage` | Nachrichtenmodell (Request/Response/Error/Notification, strukturierte Fehler) |
 | `JsonRpcLineCodec` | NDJSON-Encoding/-Decoding (reines Framing, unit-getestet) |
 | `SidecarCallException` | Sidecar-Fehler mit JSON-RPC-Fehlercode |
-| `SidecarTimeoutException` | Call-/Ready-Timeout |
+| `SidecarTimeoutException` | Call-/Ready-Timeout; wahlweise mit stderr-Diagnose (Startfehler: fehlendes Modul, Syntaxfehler) |
 | `SidecarToolDescriptor` | Tool-Registrierung (`name`, `description`, `parameters`) |
 | `NodeSidecarPluginRuntime` | Plugin-Laufzeit (P4-01): `load(Plugin)` â†’ Quittung (Tools/Commands/Channels/Hooks), `unload(id)`, `loadAvailable()`, `tools()`, `callTool(...)`, `deliverChannelMessage(channel, message)`, `close()` |
 | `EntryPointResolver` | Entry-AuflÃ¶sung eines Bundles (`package.json` â†’ `main`, Traversal-Schutz, dann `src/index.js` â€¦ `main.js`) |
@@ -201,4 +201,4 @@ module.exports = definePluginEntry({
 - **npm/TypeScript-Bundles:** `definePluginEntry`-Shim + CommonJS sind die **Referenz-Laufzeit**; echte OpenClaw-Bundles (ESM-TypeScript, `openclaw/plugin-sdk`-Imports) benÃ¶tigen npm-AuflÃ¶sung/Bundling â€” gegen den neuen SDK-Stand (Subpath-Imports, moderne Hook-Stages, `setup`-Deskriptoren).
 - **Hooks/Channels:** **Voll-Hook-Katalog (P1-11) umgesetzt (hermetisches Binding, Spiegel-Test 744 grün):** `HOOK_EVENTS` enthält alle modernen SDK-Stages (`openclaw-compat.md` §3: Agent-Turn, Tools inkl. `tool_result_persist`, Messages, Sessions, Lifecycle inkl. `cron_reconciled`/`cron_changed`, Installs, Skills; `before_agent_start`/SDK-Root-Imports bleiben seit 2026.6.34 entfernt und werden abgelehnt); die `before_tool_call`/`after_tool_call`-Hooks laufen weiter aus. **Channel-Runtime (P4-01) umgesetzt (hermetisches Binding, Spiegel-Test 746 grün):** `defineChannelPluginEntry`-Plugins registrieren Empfangs-Channels über `api.registerChannel({name, description, receive})` (Quittung `{name, description}`, unload entfernt sie); der Java-Kern stellt eingehende Nachrichten (analog `ChannelMessage.inbound`) über dieselbe Bridge als `channel.deliver` an den `receive`-Handler zu (Fehler: `ERROR_CHANNEL_NOT_FOUND` -32007, `ERROR_CHANNEL_EXECUTION` -32008).
 - **Backpressure/Parallelität:** **umgesetzt (hermetisches Binding, Spiegel-Test 749 grün):** die Bridge bleibt id-basiert (Eine-Antwort-pro-Request), begrenzt aber gleichzeitige In-Flight-Requests je Sidecar über einen fairen Semaphore auf `NodeSidecarBridge.DEFAULT_MAX_CONCURRENT_REQUESTS` (**8**, Default `maxConcurrentRequests`); ein Aufruf, dessen Slot nicht innerhalb von `DEFAULT_BACKPRESSURE_WAIT_MILLIS` (**5 s**) frei wird, scheitert mit `ERROR_BUSY` (-32009 `SidecarCallException`) statt unbegrenzt zu warten; stdio-Schreibzugriffe sind serialisiert (parallele Aufrufer teilen sich dieselbe stdin-Pipe). Konfigurierbar über `NodeSidecarBridge.start(...)`; Tests: Burst bis zum Limit (Spiegel-Test 748) und Ablehnung darüber (Spiegel-Test 749).
-- **Stderr-Auswertung:** Bisher nur Log; bei Startfehlern (fehlendes npm-Modul) kÃ¶nnte stderr gezielt in die Fehlermeldung flieÃŸen.
+- **Stderr-Auswertung:** **umgesetzt (hermetisches Binding, Spiegel-Test 750/751 grün):** stderr wird weiterhin gedrained (nie als Protokoll geparst), aber pro Prozesslauf gesammelt (max. 20 Zeilen). Scheitert der Start (fehlendes npm-Modul, Syntaxfehler: Ready-Timeout) bzw. crasht der Prozess, fließen die stderr-Zeilen in die Fehlermeldung ein (`SidecarTimeoutException` bzw. `IOException` der Bridge). stderr-Ausgaben während des normalen Betriebs stören das Protokoll weiterhin nicht (Spiegel-Test 751).

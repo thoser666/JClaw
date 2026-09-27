@@ -22,6 +22,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Semaphore;
@@ -71,6 +72,8 @@ public class NodeSidecarBridge implements Closeable {
     public static final long DEFAULT_BACKPRESSURE_WAIT_MILLIS = 5_000;
 
     private static final long PROCESS_STOP_TIMEOUT_SECONDS = 5;
+    /** Maximale Anzahl gesammelter stderr-Zeilen für die Fehlerdiagnose (Schwanzansicht). */
+    private static final int MAX_STDERR_LINES = 20;
 
     private static final Logger log = LoggerFactory.getLogger(NodeSidecarBridge.class);
 
@@ -93,6 +96,7 @@ public class NodeSidecarBridge implements Closeable {
     private volatile CountDownLatch readyLatch = new CountDownLatch(1);
     private volatile JsonNode readyInfo;
     private volatile Path scriptFile;
+    private volatile List<String> stderrLines = new CopyOnWriteArrayList<>();
 
     private NodeSidecarBridge(String script, ObjectMapper objectMapper, long callTimeoutMillis, long readyTimeoutMillis,
                               int maxConcurrentRequests, long backpressureWaitMillis) {
@@ -332,6 +336,7 @@ public class NodeSidecarBridge implements Closeable {
             this.scriptFile = scriptFile;
             this.stdin = new BufferedWriter(new OutputStreamWriter(process.getOutputStream(), StandardCharsets.UTF_8));
             BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8));
+            stderrLines = new CopyOnWriteArrayList<>();
             drainStderr(process);
             readyInfo = null;
             readyLatch = new CountDownLatch(1);
@@ -345,8 +350,9 @@ public class NodeSidecarBridge implements Closeable {
             try {
                 if (!readyLatch.await(readyTimeoutMillis, TimeUnit.MILLISECONDS)) {
                     log.error("Node-Sidecar (pid={}) hat sich nicht innerhalb von {} ms bereitgemeldet.", process.pid(), readyTimeoutMillis);
+                    String stderr = stderrDetail(stderrLines);
                     closeProcess();
-                    throw new SidecarTimeoutException(METHOD_READY, readyTimeoutMillis);
+                    throw new SidecarTimeoutException(METHOD_READY, readyTimeoutMillis, stderr);
                 }
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
@@ -398,7 +404,10 @@ public class NodeSidecarBridge implements Closeable {
             if (process.isAlive() && !intentionalStop) {
                 log.warn("Node-Sidecar (pid={}) hat die Ausgabe ohne close() beendet.", process.pid());
             }
-            failPending(new IOException("Der Node-Sidecar-Prozess hat die Ausgabe beendet (pid=" + process.pid() + ")."));
+            // Bei einem Crash (ohne close()) fließt die stderr-Ausgabe in die Fehlermeldung,
+            // damit Startfehler (fehlendes Modul, Syntaxfehler) diagnostizierbar sind.
+            failPending(new IOException("Der Node-Sidecar-Prozess hat die Ausgabe beendet (pid=" + process.pid() + ")."
+                    + stderrDetail(stderrLines)));
         }
     }
 
@@ -415,6 +424,7 @@ public class NodeSidecarBridge implements Closeable {
                 String line;
                 while ((line = err.readLine()) != null) {
                     log.debug("Sidecar-stderr (pid={}): {}", process.pid(), line);
+                    addStderrLine(line);
                 }
             } catch (IOException ignored) {
                 // Prozess beendet: Schleife endet von selbst
@@ -422,6 +432,29 @@ public class NodeSidecarBridge implements Closeable {
         }, "jclaw-sidecar-stderr");
         stderrThread.setDaemon(true);
         stderrThread.start();
+    }
+
+    /** Sammelt stderr-Zeilen (begrenzt auf den Schwanz) für die Fehlerdiagnose. */
+    private void addStderrLine(String line) {
+        List<String> lines = stderrLines;
+        if (lines.size() < MAX_STDERR_LINES) {
+            lines.add(line);
+        }
+    }
+
+    /** Stellt die gesammelten stderr-Zeilen als kompakten Diagnose-Anhang dar (leer, wenn nichts vorliegt). */
+    private String stderrDetail(List<String> lines) {
+        if (lines == null || lines.isEmpty()) {
+            return "";
+        }
+        StringBuilder detail = new StringBuilder(" stderr: ");
+        for (int i = 0; i < lines.size(); i++) {
+            if (i > 0) {
+                detail.append(" | ");
+            }
+            detail.append(lines.get(i));
+        }
+        return detail.toString();
     }
 
     private void closeProcess() {

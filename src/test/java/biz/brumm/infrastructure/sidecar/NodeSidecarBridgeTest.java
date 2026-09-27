@@ -218,6 +218,38 @@ class NodeSidecarBridgeTest {
         }
     }
 
+    @Test
+    @EnabledIf("nodeAvailable")
+    void startFailureEmbedsStderrInTimeoutMessage() throws IOException {
+        // Script mit Startfehler (fehlendes "Modul"): Node beendet sich mit stderr-Ausgabe,
+        // ohne jemals sidecar.ready zu senden. Die stderr-Diagnose muss in der Timeout-Meldung stecken.
+        String script = "console.error('Modul nicht gefunden: acme-broken'); process.exit(1);";
+
+        assertThatThrownBy(() -> NodeSidecarBridge.start(script, objectMapper, 5_000, 1_000))
+                .isInstanceOf(SidecarTimeoutException.class)
+                .hasMessageContaining("Modul nicht gefunden: acme-broken");
+    }
+
+    @Test
+    @EnabledIf("nodeAvailable")
+    void stderrIsDrainedWithoutCorruptingProtocolStream() throws IOException {
+        // Sidecar, der stderr nur zum Loggen nutzt (nie als Antwort geparst): Handshake und
+        // Tool-Aufrufe müssen normal funktionieren, obwohl stderr-Ausgaben auftreten.
+        String script = "const readline=require('readline');console.error('Warnung: Plugin lädt asynchron');"
+                + "const rl=readline.createInterface({input:process.stdin});"
+                + "rl.on('line',l=>{const q=JSON.parse(l);const args=(q.params&&q.params.arguments)||{};"
+                + "process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:q.id,result:{result:(args.a||0)+(args.b||0)}})+'\\n');});"
+                + "setImmediate(()=>process.stdout.write(JSON.stringify("
+                + "{jsonrpc:'2.0',method:'sidecar.ready',params:{name:'stderr-sidecar'}})+'\\n'));";
+
+        try (NodeSidecarBridge bridge = NodeSidecarBridge.start(script, objectMapper, 5_000, 5_000)) {
+            JsonNode info = bridge.readyInfo();
+            assertThat(info.path("name").asString()).isEqualTo("stderr-sidecar");
+            ObjectNode arguments = objectMapper.createObjectNode().put("a", 2).put("b", 3);
+            assertThat(bridge.callTool("add", arguments).path("result").asInt()).isEqualTo(5);
+        }
+    }
+
     private static JsonNode add(NodeSidecarBridge bridge, int a, int b) throws Exception {
         return bridge.callTool("add", new ObjectMapper().createObjectNode().put("a", a).put("b", b));
     }

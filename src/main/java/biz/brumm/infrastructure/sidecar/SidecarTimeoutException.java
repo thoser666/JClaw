@@ -11,4 +11,9 @@ public class SidecarTimeoutException extends IOException {
     public SidecarTimeoutException(String operation, long timeoutMillis) {
         super("Sidecar hat auf '" + operation + "' nicht innerhalb von " + timeoutMillis + " ms geantwortet.");
     }
+
+    public SidecarTimeoutException(String operation, long timeoutMillis, String stderrDetail) {
+        super("Sidecar hat auf '" + operation + "' nicht innerhalb von " + timeoutMillis + " ms geantwortet."
+                + (stderrDetail == null || stderrDetail.isEmpty() ? "" : " stderr: " + stderrDetail));
+    }
 }
