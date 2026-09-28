@@ -1,5 +1,6 @@
 package biz.brumm.domain.service;
 
+import biz.brumm.config.GuardrailProperties;
 import biz.brumm.config.SessionProperties;
 import biz.brumm.domain.model.Session;
 import biz.brumm.domain.port.out.ConversationStore;
@@ -34,7 +35,15 @@ class SessionServiceTest {
     @BeforeEach
     void setUp() {
         service = new SessionService(sessionStore, conversationStore,
-                new SessionProperties("none", 4, 60));
+                new SessionProperties("none", 4, 60), guardDisabled());
+    }
+
+    private static CredentialLeakGuard guardDisabled() {
+        return new CredentialLeakGuard(new GuardrailProperties(false, List.of()), null);
+    }
+
+    private static CredentialLeakGuard guardWithSecrets(List<String> secrets) {
+        return new CredentialLeakGuard(new GuardrailProperties(true, secrets), null);
     }
 
     @Test
@@ -119,7 +128,7 @@ class SessionServiceTest {
     @Test
     void shouldResetReturnsFalseForDailyWhenSameDay() {
         SessionService dailyService = new SessionService(sessionStore, conversationStore,
-                new SessionProperties("daily", 4, 60));
+                new SessionProperties("daily", 4, 60), guardDisabled());
         Session session = new Session("s1", null, Instant.now(), Instant.now(), Instant.now());
 
         assertThat(dailyService.shouldReset(session)).isFalse();
@@ -128,7 +137,7 @@ class SessionServiceTest {
     @Test
     void shouldResetReturnsTrueForDailyWhenOlderThanBoundary() {
         SessionService dailyService = new SessionService(sessionStore, conversationStore,
-                new SessionProperties("daily", 0, 60));
+                new SessionProperties("daily", 0, 60), guardDisabled());
         Instant twoDaysAgo = Instant.now().minus(2, ChronoUnit.DAYS);
         Session session = new Session("s1", null, twoDaysAgo, twoDaysAgo, twoDaysAgo);
 
@@ -138,7 +147,7 @@ class SessionServiceTest {
     @Test
     void shouldResetReturnsTrueForIdleWhenExpired() {
         SessionService idleService = new SessionService(sessionStore, conversationStore,
-                new SessionProperties("idle", 4, 1));
+                new SessionProperties("idle", 4, 1), guardDisabled());
         Instant twoMinutesAgo = Instant.now().minus(2, ChronoUnit.MINUTES);
         Session session = new Session("s1", null, Instant.now(), twoMinutesAgo, twoMinutesAgo);
 
@@ -148,7 +157,7 @@ class SessionServiceTest {
     @Test
     void shouldResetReturnsFalseForIdleWhenNotExpired() {
         SessionService idleService = new SessionService(sessionStore, conversationStore,
-                new SessionProperties("idle", 4, 60));
+                new SessionProperties("idle", 4, 60), guardDisabled());
         Session session = new Session("s1", null, Instant.now(), Instant.now(), Instant.now());
 
         assertThat(idleService.shouldReset(session)).isFalse();
@@ -166,5 +175,30 @@ class SessionServiceTest {
 
         verify(sessionStore).deleteById("s1");
         verify(conversationStore).deleteByContextId("s1");
+    }
+
+    @Test
+    void touchSessionRedactsKnownSecretFromDisplayName() {
+        SessionService guarded = new SessionService(sessionStore, conversationStore,
+                new SessionProperties("none", 4, 60), guardWithSecrets(List.of("TOPSECRET")));
+        Session existing = new Session("s1", null, Instant.now(), Instant.now(), Instant.now());
+        when(sessionStore.findById("s1")).thenReturn(Optional.of(existing));
+        when(sessionStore.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        Session touched = guarded.touchSession("s1", "Projekt TOPSECRET Status");
+
+        assertThat(touched.displayName()).isEqualTo("Projekt [REDACTED] Status");
+    }
+
+    @Test
+    void listSessionsRedactsKnownSecretFromExistingDisplayName() {
+        SessionService guarded = new SessionService(sessionStore, conversationStore,
+                new SessionProperties("none", 4, 60), guardWithSecrets(List.of("TOPSECRET")));
+        Session existing = new Session("s1", "TOPSECRET ist geheim", Instant.now(), Instant.now(), Instant.now());
+        when(sessionStore.findAll()).thenReturn(List.of(existing));
+
+        List<Session> sessions = guarded.listSessions();
+
+        assertThat(sessions.get(0).displayName()).isEqualTo("[REDACTED] ist geheim");
     }
 }

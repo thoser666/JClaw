@@ -25,19 +25,21 @@ public class SessionService {
     private final SessionStore sessionStore;
     private final ConversationStore conversationStore;
     private final SessionProperties properties;
+    private final CredentialLeakGuard credentialLeakGuard;
 
     public SessionService(SessionStore sessionStore, ConversationStore conversationStore,
-                          SessionProperties properties) {
+                          SessionProperties properties, CredentialLeakGuard credentialLeakGuard) {
         this.sessionStore = sessionStore;
         this.conversationStore = conversationStore;
         this.properties = properties;
+        this.credentialLeakGuard = credentialLeakGuard;
     }
 
     public Optional<Session> findSession(String sessionId) {
         if (sessionId == null || sessionId.isBlank()) {
             return Optional.empty();
         }
-        return sessionStore.findById(sessionId);
+        return sessionStore.findById(sessionId).map(this::sanitize);
     }
 
     public Session createSession(String sessionId) {
@@ -54,7 +56,7 @@ public class SessionService {
         Session session = existing.get();
         String displayName = session.displayName();
         if (displayName == null && prompt != null && !prompt.isBlank()) {
-            displayName = deriveDisplayName(prompt);
+            displayName = credentialLeakGuard.redact(deriveDisplayName(prompt));
         }
         Instant now = Instant.now();
         Session updated = new Session(session.sessionId(), displayName, session.group(),
@@ -75,7 +77,7 @@ public class SessionService {
     }
 
     public List<Session> listSessionsByGroup(String group) {
-        return sessionStore.findByGroup(group);
+        return sessionStore.findByGroup(group).stream().map(this::sanitize).toList();
     }
 
     public boolean shouldReset(Session session) {
@@ -89,12 +91,25 @@ public class SessionService {
     }
 
     public List<Session> listSessions() {
-        return sessionStore.findAll();
+        return sessionStore.findAll().stream().map(this::sanitize).toList();
     }
 
     public void deleteSession(String sessionId) {
         conversationStore.deleteByContextId(sessionId);
         sessionStore.deleteById(sessionId);
+    }
+
+    private Session sanitize(Session session) {
+        String displayName = session.displayName();
+        if (displayName == null || displayName.isBlank()) {
+            return session;
+        }
+        String redacted = credentialLeakGuard.redact(displayName);
+        if (redacted.equals(displayName)) {
+            return session;
+        }
+        return new Session(session.sessionId(), redacted, session.group(),
+                session.sessionStartedAt(), session.lastInteractionAt(), session.updatedAt());
     }
 
     private boolean isDailyResetNeeded(Instant sessionStartedAt) {

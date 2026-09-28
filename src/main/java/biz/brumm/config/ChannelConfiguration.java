@@ -3,6 +3,7 @@ package biz.brumm.config;
 import biz.brumm.domain.port.out.ChannelAdapter;
 import biz.brumm.domain.port.out.ChannelStore;
 import biz.brumm.domain.service.ChannelService;
+import biz.brumm.domain.service.CredentialLeakGuard;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -18,7 +19,8 @@ public class ChannelConfiguration {
 
     @Bean
     public ChannelService channelService(ChannelStore channelStore,
-                                          List<ChannelAdapter> adapters) {
-        return new ChannelService(channelStore, adapters);
+                                          List<ChannelAdapter> adapters,
+                                          CredentialLeakGuard credentialLeakGuard) {
+        return new ChannelService(channelStore, adapters, credentialLeakGuard);
     }
 }

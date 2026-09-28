@@ -2,6 +2,8 @@ package biz.brumm.infrastructure.adapter.in.web;
 
 import biz.brumm.domain.model.*;
 import biz.brumm.domain.service.ChannelService;
+import biz.brumm.domain.service.CredentialLeakGuard;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
@@ -27,6 +29,14 @@ class ChannelRestControllerTest {
 
     @MockitoBean
     private ChannelService channelService;
+
+    @MockitoBean
+    private CredentialLeakGuard credentialLeakGuard;
+
+    @BeforeEach
+    void setUp() {
+        when(credentialLeakGuard.sanitizeConfig(any())).thenAnswer(inv -> inv.getArgument(0));
+    }
 
     private Channel createTestChannel() {
         return new Channel("ch-1", "Telegram Bot", ChannelType.TELEGRAM, true,
@@ -113,5 +123,15 @@ class ChannelRestControllerTest {
         mockMvc.perform(get("/api/v1/channels/adapters"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.available[0]").value("TELEGRAM"));
+    }
+
+    @Test
+    void getReturnsMaskedConfigForSecretKeys() throws Exception {
+        when(channelService.findById("ch-1")).thenReturn(Optional.of(createTestChannel()));
+        when(credentialLeakGuard.sanitizeConfig(any())).thenReturn(Map.of("token", "[REDACTED]"));
+
+        mockMvc.perform(get("/api/v1/channels/ch-1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.config.token").value("[REDACTED]"));
     }
 }

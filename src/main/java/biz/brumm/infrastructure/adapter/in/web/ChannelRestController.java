@@ -3,6 +3,7 @@ package biz.brumm.infrastructure.adapter.in.web;
 import biz.brumm.domain.model.*;
 import biz.brumm.domain.port.out.ChannelAdapter;
 import biz.brumm.domain.service.ChannelService;
+import biz.brumm.domain.service.CredentialLeakGuard;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -22,10 +23,13 @@ import java.util.Map;
 @RequestMapping("/api/v1/channels")
 public class ChannelRestController {
 
-    private final ChannelService channelService;
+private final ChannelService channelService;
+    private final CredentialLeakGuard credentialLeakGuard;
 
-    public ChannelRestController(ChannelService channelService) {
+    public ChannelRestController(ChannelService channelService,
+                                 CredentialLeakGuard credentialLeakGuard) {
         this.channelService = channelService;
+        this.credentialLeakGuard = credentialLeakGuard;
     }
 
     @GetMapping
@@ -186,7 +190,7 @@ public class ChannelRestController {
         map.put("name", ch.name());
         map.put("type", ch.type().name());
         map.put("enabled", ch.enabled());
-        map.put("config", ch.config());
+        map.put("config", credentialLeakGuard.sanitizeConfig(ch.config()));
         map.put("createdAt", ch.createdAt() != null ? ch.createdAt().toString() : null);
         map.put("updatedAt", ch.updatedAt() != null ? ch.updatedAt().toString() : null);
         return map;

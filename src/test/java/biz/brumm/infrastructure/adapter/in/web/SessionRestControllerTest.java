@@ -1,7 +1,7 @@
 package biz.brumm.infrastructure.adapter.in.web;
 
 import biz.brumm.domain.model.Session;
-import biz.brumm.domain.port.out.ConversationStore;
+import biz.brumm.domain.port.in.GetConversationUseCase;
 import biz.brumm.domain.service.SessionService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -32,7 +32,7 @@ class SessionRestControllerTest {
     private SessionService sessionService;
 
     @MockitoBean
-    private ConversationStore conversationStore;
+    private GetConversationUseCase getConversationUseCase;
 
     @Test
     void listSessionsReturnsAllSessions() throws Exception {
@@ -127,7 +127,7 @@ class SessionRestControllerTest {
                 new Session("s1", "Test", Instant.parse("2026-08-16T10:00:00Z"),
                         Instant.parse("2026-08-16T10:00:00Z"),
                         Instant.parse("2026-08-16T10:00:00Z"))));
-        when(conversationStore.findByContextId("s1")).thenReturn(List.of(
+        when(getConversationUseCase.getConversation("s1")).thenReturn(List.of(
                 new biz.brumm.domain.model.ConversationMessage("USER", "Hallo"),
                 new biz.brumm.domain.model.ConversationMessage("ASSISTANT", "Hi!")));
 

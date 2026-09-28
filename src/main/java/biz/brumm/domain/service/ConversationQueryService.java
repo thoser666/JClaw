@@ -11,9 +11,12 @@ import java.util.List;
 public class ConversationQueryService implements GetConversationUseCase {
 
     private final ConversationStore conversationStore;
+    private final CredentialLeakGuard credentialLeakGuard;
 
-    public ConversationQueryService(ConversationStore conversationStore) {
+    public ConversationQueryService(ConversationStore conversationStore,
+                                    CredentialLeakGuard credentialLeakGuard) {
         this.conversationStore = conversationStore;
+        this.credentialLeakGuard = credentialLeakGuard;
     }
 
     @Override
@@ -21,6 +24,16 @@ public class ConversationQueryService implements GetConversationUseCase {
         if (contextId == null || contextId.isBlank()) {
             return List.of();
         }
-        return conversationStore.findByContextId(contextId);
+        return conversationStore.findByContextId(contextId).stream()
+                .map(this::sanitize)
+                .toList();
+    }
+
+    private ConversationMessage sanitize(ConversationMessage message) {
+        String redacted = credentialLeakGuard.redact(message.text());
+        if (redacted.equals(message.text())) {
+            return message;
+        }
+        return new ConversationMessage(message.role(), redacted);
     }
 }

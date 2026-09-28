@@ -1,6 +1,7 @@
 package biz.brumm.domain.service;
 
 import biz.brumm.config.ClawAgentProperties;
+import biz.brumm.config.GuardrailProperties;
 import biz.brumm.config.SessionProperties;
 import biz.brumm.config.SkillProperties;
 import biz.brumm.domain.model.AgentCommand;
@@ -46,7 +47,8 @@ class ClawAgentServiceTest {
 
     private SessionService sessionService() {
         return new SessionService(sessionStore, conversationStore,
-                new SessionProperties("none", 4, 60));
+                new SessionProperties("none", 4, 60),
+                new CredentialLeakGuard(new GuardrailProperties(false, List.of()), null));
     }
 
     @Test

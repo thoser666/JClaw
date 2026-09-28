@@ -16,10 +16,13 @@ public class ChannelService {
     private static final Logger log = LoggerFactory.getLogger(ChannelService.class);
 
     private final ChannelStore channelStore;
+    private final CredentialLeakGuard credentialLeakGuard;
     private final Map<ChannelType, ChannelAdapter> adapters = new EnumMap<>(ChannelType.class);
 
-    public ChannelService(ChannelStore channelStore, List<ChannelAdapter> adapterList) {
+    public ChannelService(ChannelStore channelStore, List<ChannelAdapter> adapterList,
+                          CredentialLeakGuard credentialLeakGuard) {
         this.channelStore = channelStore;
+        this.credentialLeakGuard = credentialLeakGuard;
         for (ChannelAdapter adapter : adapterList) {
             adapters.put(adapter.channelType(), adapter);
             registriert(adapter.channelType());
@@ -41,7 +44,9 @@ public class ChannelService {
     }
 
     public Channel save(Channel channel) {
-        return channelStore.saveChannel(channel);
+        Channel saved = channelStore.saveChannel(channel);
+        credentialLeakGuard.refresh();
+        return saved;
     }
 
     public void delete(String id) {
@@ -72,11 +77,12 @@ public class ChannelService {
                     "Channel '" + channel.name() + "' ist nicht verfuegbar.");
         }
 
-        ChannelMessage outbound = ChannelMessage.outbound(channel.id(), content, threadId, sessionId);
+        String sanitized = credentialLeakGuard.redact(content);
+        ChannelMessage outbound = ChannelMessage.outbound(channel.id(), sanitized, threadId, sessionId);
         ChannelMessage sent = adapter.send(channel, outbound);
         channelStore.saveMessage(sent);
         log.info("Nachricht an '{}' gesendet: {}", channel.name(),
-                content.length() > 50 ? content.substring(0, 50) + "..." : content);
+                sanitized.length() > 50 ? sanitized.substring(0, 50) + "..." : sanitized);
         return sent;
     }
 
@@ -84,9 +90,9 @@ public class ChannelService {
 
     public void handleInbound(ChannelMessage message) {
         channelStore.saveMessage(message);
+        String preview = credentialLeakGuard.redact(message.content());
         log.info("Eingehende Nachricht auf '{}': {}", message.channelId(),
-                message.content().length() > 50
-                        ? message.content().substring(0, 50) + "..." : message.content());
+                preview.length() > 50 ? preview.substring(0, 50) + "..." : preview);
     }
 
     // --- Bindungen ---

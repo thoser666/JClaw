@@ -1,5 +1,6 @@
 package biz.brumm.domain.service;
 
+import biz.brumm.config.GuardrailProperties;
 import biz.brumm.domain.model.*;
 import biz.brumm.domain.port.out.ChannelAdapter;
 import biz.brumm.domain.port.out.ChannelStore;
@@ -35,9 +36,17 @@ class ChannelServiceTest {
     @BeforeEach
     void setUp() {
         when(telegramAdapter.channelType()).thenReturn(ChannelType.TELEGRAM);
-        channelService = new ChannelService(channelStore, List.of(telegramAdapter));
+        channelService = new ChannelService(channelStore, List.of(telegramAdapter), guardDisabled());
         telegramChannel = new Channel("ch-1", "Telegram Bot", ChannelType.TELEGRAM, true,
                 Map.of("token", "abc"), Instant.now(), Instant.now());
+    }
+
+    private static CredentialLeakGuard guardDisabled() {
+        return new CredentialLeakGuard(new GuardrailProperties(false, List.of()), null);
+    }
+
+    private static CredentialLeakGuard guardWithSecrets(List<String> secrets) {
+        return new CredentialLeakGuard(new GuardrailProperties(true, secrets), null);
     }
 
     @Test
@@ -115,6 +124,21 @@ class ChannelServiceTest {
         ChannelMessage msg = ChannelMessage.inbound("ch-1", "ext-1", "Hi", "u1", "Max", null, "sess-1");
         channelService.handleInbound(msg);
         verify(channelStore).saveMessage(msg);
+    }
+
+    @Test
+    void sendRedactsKnownSecretFromOutboundContent() throws ChannelAdapter.ChannelException {
+        ChannelService guarded = new ChannelService(channelStore, List.of(telegramAdapter),
+                guardWithSecrets(List.of("TOPSECRET")));
+        ChannelMessage sent = ChannelMessage.outbound("ch-1", "[REDACTED]", null, "sess-1");
+        when(telegramAdapter.isAvailable(telegramChannel)).thenReturn(true);
+        when(telegramAdapter.send(eq(telegramChannel), any())).thenReturn(sent);
+        when(channelStore.saveMessage(any())).thenReturn(sent);
+
+        ChannelMessage result = guarded.send(telegramChannel, "PIN TOPSECRET im Text", null, "sess-1");
+
+        assertThat(result.content()).isEqualTo("[REDACTED]");
+        verify(telegramAdapter).send(eq(telegramChannel), argThat(m -> !m.content().contains("TOPSECRET")));
     }
 
     @Test

@@ -2,7 +2,7 @@ package biz.brumm.infrastructure.adapter.in.web;
 
 import biz.brumm.domain.model.ConversationMessage;
 import biz.brumm.domain.model.Session;
-import biz.brumm.domain.port.out.ConversationStore;
+import biz.brumm.domain.port.in.GetConversationUseCase;
 import biz.brumm.domain.service.SessionService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -15,11 +15,12 @@ import java.util.Map;
 public class SessionRestController {
 
     private final SessionService sessionService;
-    private final ConversationStore conversationStore;
+    private final GetConversationUseCase getConversationUseCase;
 
-    public SessionRestController(SessionService sessionService, ConversationStore conversationStore) {
+    public SessionRestController(SessionService sessionService,
+                                 GetConversationUseCase getConversationUseCase) {
         this.sessionService = sessionService;
-        this.conversationStore = conversationStore;
+        this.getConversationUseCase = getConversationUseCase;
     }
 
     @GetMapping
@@ -62,7 +63,7 @@ public class SessionRestController {
         if (sessionService.findSession(sessionId).isEmpty()) {
             return ResponseEntity.notFound().build();
         }
-        List<ConversationMessage> messages = conversationStore.findByContextId(sessionId);
+        List<ConversationMessage> messages = getConversationUseCase.getConversation(sessionId);
         List<Map<String, String>> transcript = messages.stream()
                 .map(m -> Map.of("role", m.role(), "text", m.text()))
                 .toList();
