@@ -250,6 +250,56 @@ class NodeSidecarBridgeTest {
         }
     }
 
+    @Test
+    @EnabledIf("nodeAvailable")
+    void oversizedResponseIsRejectedWithResponseTooLargeError() throws Exception {
+        // Ein Sidecar, der je Tool eine kleine oder eine überdimensionierte Antwort liefert; Cap ist klein gesetzt,
+        // sodass die Handshake-Zeile und normale Antworten darunter bleiben, die große Antwort aber überschritten wird.
+        String script = "const readline=require('readline');"
+                + "const rl=readline.createInterface({input:process.stdin});"
+                + "rl.on('line',l=>{const q=JSON.parse(l);if(q.method==='tool.call'){"
+                + "const name=q.params&&q.params.name;"
+                + "const result=name==='big'?('X'.repeat(1000)):('klein');"
+                + "process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:q.id,result:{result}})+'\\n');}});"
+                + "setImmediate(()=>process.stdout.write(JSON.stringify("
+                + "{jsonrpc:'2.0',method:'sidecar.ready',params:{name:'cap-sidecar'}})+'\\n'));";
+
+        try (NodeSidecarBridge bridge = NodeSidecarBridge.start(script, objectMapper, 5_000, 5_000, 4, 5_000, 200)) {
+            // Normale Antwort (Zeile unter dem Cap) funktioniert weiterhin.
+            assertThat(bridge.callTool("add", objectMapper.createObjectNode().put("a", 1).put("b", 2)).path("result").asString())
+                    .isEqualTo("klein");
+
+            // Überdimensionierte Antwort (Zeile > 200 Zeichen) wird als ERROR_RESPONSE_TOO_LARGE abgewiesen.
+            assertThatThrownBy(() -> bridge.callTool("big", null))
+                    .isInstanceOf(SidecarCallException.class)
+                    .satisfies(e -> assertThat(((SidecarCallException) e).code())
+                            .isEqualTo(NodeSidecarBridge.ERROR_RESPONSE_TOO_LARGE));
+
+            // Die Bridge bleibt nach dem Abweisen einer zu großen Antwort funktionsfähig.
+            assertThat(bridge.callTool("add", objectMapper.createObjectNode().put("a", 3).put("b", 4)).path("result").asString())
+                    .isEqualTo("klein");
+        }
+    }
+
+    @Test
+    @EnabledIf("nodeAvailable")
+    void oversizedNotificationLineIsDroppedWithoutBreakingBridge() throws Exception {
+        // Eine überdimensionierte Zeile ohne Request-Id (riesige Notification) wird verworfen, ohne den
+        // Protokollbetrieb zu stören; die id-basierte Antwort erreicht den Aufrufer normal.
+        String script = "const readline=require('readline');"
+                + "const rl=readline.createInterface({input:process.stdin});"
+                + "rl.on('line',l=>{const q=JSON.parse(l);if(q.method==='tool.call'){"
+                + "process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:q.id,result:{result:'ok'}})+'\\n');}});"
+                + "setImmediate(()=>{"
+                + "process.stdout.write(JSON.stringify({jsonrpc:'2.0',method:'sidecar.ready',params:{name:'noise-sidecar'}})+'\\n');"
+                + "process.stdout.write('{\"jsonrpc\":\"2.0\",\"method\":\"log\",\"params\":{\"chunk\":\"'+'Y'.repeat(1000)+'\"}}\\n');});";
+
+        try (NodeSidecarBridge bridge = NodeSidecarBridge.start(script, objectMapper, 5_000, 5_000, 4, 5_000, 200)) {
+            ObjectNode arguments = objectMapper.createObjectNode().put("a", 1).put("b", 2);
+            assertThat(bridge.callTool("add", arguments).path("result").asString()).isEqualTo("ok");
+        }
+    }
+
     private static JsonNode add(NodeSidecarBridge bridge, int a, int b) throws Exception {
         return bridge.callTool("add", new ObjectMapper().createObjectNode().put("a", a).put("b", b));
     }

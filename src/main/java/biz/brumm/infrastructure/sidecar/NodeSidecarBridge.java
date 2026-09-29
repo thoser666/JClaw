@@ -63,6 +63,8 @@ public class NodeSidecarBridge implements Closeable {
     public static final int ERROR_CHANNEL_NOT_FOUND = -32007;
     public static final int ERROR_CHANNEL_EXECUTION = -32008;
     public static final int ERROR_BUSY = -32009;
+    /** Vom Kern erzeugt: Eine eingehende Sidecar-Antwortzeile überschreitet das Response-Cap. */
+    public static final int ERROR_RESPONSE_TOO_LARGE = -32010;
 
     public static final long DEFAULT_CALL_TIMEOUT_MILLIS = 15_000;
     public static final long DEFAULT_READY_TIMEOUT_MILLIS = 5_000;
@@ -70,6 +72,8 @@ public class NodeSidecarBridge implements Closeable {
     public static final int DEFAULT_MAX_CONCURRENT_REQUESTS = 8;
     /** Wie lange ein Aufruf auf einen freien Slot wartet, bevor er mit {@code ERROR_BUSY} abgewiesen wird. */
     public static final long DEFAULT_BACKPRESSURE_WAIT_MILLIS = 5_000;
+    /** Maximale Länge einer eingehenden Sidecar-Antwortzeile (Zeichen). Guard gegen feindliche/überdimensionierte Antworten. */
+    public static final int DEFAULT_MAX_RESPONSE_LENGTH = 1_000_000;
 
     private static final long PROCESS_STOP_TIMEOUT_SECONDS = 5;
     /** Maximale Anzahl gesammelter stderr-Zeilen für die Fehlerdiagnose (Schwanzansicht). */
@@ -84,6 +88,7 @@ public class NodeSidecarBridge implements Closeable {
     private final long readyTimeoutMillis;
     private final int maxConcurrentRequests;
     private final long backpressureWaitMillis;
+    private final int maxResponseLength;
     private final Semaphore requestSlot; // Backpressure: begrenzt gleichzeitige In-Flight-Requests
 
     private final AtomicBoolean closed = new AtomicBoolean();
@@ -99,7 +104,7 @@ public class NodeSidecarBridge implements Closeable {
     private volatile List<String> stderrLines = new CopyOnWriteArrayList<>();
 
     private NodeSidecarBridge(String script, ObjectMapper objectMapper, long callTimeoutMillis, long readyTimeoutMillis,
-                              int maxConcurrentRequests, long backpressureWaitMillis) {
+                              int maxConcurrentRequests, long backpressureWaitMillis, int maxResponseLength) {
         this.script = script;
         this.objectMapper = objectMapper;
         this.codec = new JsonRpcLineCodec(objectMapper);
@@ -107,6 +112,7 @@ public class NodeSidecarBridge implements Closeable {
         this.readyTimeoutMillis = readyTimeoutMillis;
         this.maxConcurrentRequests = maxConcurrentRequests;
         this.backpressureWaitMillis = backpressureWaitMillis;
+        this.maxResponseLength = maxResponseLength;
         this.requestSlot = new Semaphore(maxConcurrentRequests, true); // fair: FIFO-Reihenfolge beim Warten
     }
 
@@ -149,8 +155,22 @@ public class NodeSidecarBridge implements Closeable {
     public static NodeSidecarBridge start(String script, ObjectMapper objectMapper, long callTimeoutMillis,
                                           long readyTimeoutMillis, int maxConcurrentRequests, long backpressureWaitMillis)
             throws IOException {
+        return start(script, objectMapper, callTimeoutMillis, readyTimeoutMillis, maxConcurrentRequests, backpressureWaitMillis,
+                DEFAULT_MAX_RESPONSE_LENGTH);
+    }
+
+    /**
+     * Startet mit konfigurierbarem Backpressure und Response-Size-Cap: Eingehende Sidecar-Antwortzeilen, die
+     * {@code maxResponseLength} Zeichen überschreiten, werden nicht als Protokoll verarbeitet, sondern als
+     * {@code ERROR_RESPONSE_TOO_LARGE} abgewiesen (Guard gegen feindliche/überdimensionierte Antworten).
+     */
+    public static NodeSidecarBridge start(String script, ObjectMapper objectMapper, long callTimeoutMillis,
+                                          long readyTimeoutMillis, int maxConcurrentRequests, long backpressureWaitMillis,
+                                          int maxResponseLength)
+            throws IOException {
         NodeSidecarBridge bridge = new NodeSidecarBridge(
-                script, objectMapper, callTimeoutMillis, readyTimeoutMillis, maxConcurrentRequests, backpressureWaitMillis);
+                script, objectMapper, callTimeoutMillis, readyTimeoutMillis, maxConcurrentRequests, backpressureWaitMillis,
+                maxResponseLength);
         bridge.startProcess();
         return bridge;
     }
@@ -375,6 +395,10 @@ public class NodeSidecarBridge implements Closeable {
         try {
             String line;
             while ((line = reader.readLine()) != null) {
+                if (line.length() > maxResponseLength) {
+                    rejectResponseTooLarge(line);
+                    continue;
+                }
                 JsonRpcMessage message;
                 try {
                     message = codec.decode(line);
@@ -416,6 +440,49 @@ public class NodeSidecarBridge implements Closeable {
             future.completeExceptionally(cause);
         }
         pending.clear();
+    }
+
+    /**
+     * Weist eine über das Cap hinausgehende Sidecar-Ausgabe ab, ohne sie als Protokoll zu parsen
+     * (Memory-Guard gegen feindliche/überdimensionierte Antworten). Ist eine anfragende Antwort
+     * erkennbar (Request-Id am Zeilenanfang), wird genau diese ausstehende Future mit
+     * {@code ERROR_RESPONSE_TOO_LARGE} abgeschlossen; ohne erkennbare Id (Notification/defekte
+     * Ausgabe) wird die Zeile verworfen.
+     */
+    private void rejectResponseTooLarge(String line) {
+        long responseId = extractResponseId(line);
+        if (responseId >= 0) {
+            CompletableFuture<JsonRpcMessage> future = pending.remove(responseId);
+            if (future != null) {
+                future.complete(JsonRpcMessage.error(responseId, ERROR_RESPONSE_TOO_LARGE,
+                        "Sidecar-Antwort überschreitet das Response-Cap von " + maxResponseLength + " Zeichen."));
+                log.warn("Oversized Sidecar-Antwort (id={}, {} Zeichen > Cap {}): als {} abgewiesen.",
+                        responseId, line.length(), maxResponseLength, ERROR_RESPONSE_TOO_LARGE);
+            }
+        } else {
+            log.warn("Oversized Sidecar-Ausgabe ohne erkennbare Request-Id ({} Zeichen > Cap {}) verworfen.",
+                    line.length(), maxResponseLength);
+        }
+    }
+
+    /** Extrahiert die (numerische) Request-Id aus dem Anfang einer JSON-RPC-Antwortzeile; {@code -1}, wenn nicht erkennbar. */
+    private long extractResponseId(String line) {
+        int idx = line.indexOf("\"id\":");
+        if (idx < 0) {
+            return -1;
+        }
+        int pos = idx + 5;
+        while (pos < line.length() && Character.isWhitespace(line.charAt(pos))) {
+            pos++;
+        }
+        long id = 0;
+        boolean any = false;
+        while (pos < line.length() && Character.isDigit(line.charAt(pos))) {
+            id = id * 10 + (line.charAt(pos) - '0');
+            any = true;
+            pos++;
+        }
+        return any ? id : -1;
     }
 
     private void drainStderr(Process process) {
