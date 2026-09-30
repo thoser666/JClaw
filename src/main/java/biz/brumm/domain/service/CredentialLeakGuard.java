@@ -66,6 +66,11 @@ public class CredentialLeakGuard {
         return properties.enabled();
     }
 
+    /** Liefert die aktuell bekannten Secrets (explizit konfigurierte + Channel-Config-Secrets). */
+    public List<String> knownSecrets() {
+        return knownSecrets;
+    }
+
     /**
      * Ersetzt alle bekannten Secrets im Text durch {@link #REDACTED}.
      * Bei deaktiviertem Guardrail oder leerem Text unveraendert.

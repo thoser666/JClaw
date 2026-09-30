@@ -1,6 +1,7 @@
 package biz.brumm.infrastructure.adapter.out.ai.tool;
 
 import biz.brumm.domain.port.out.AgentTool;
+import biz.brumm.domain.service.SecretEgressGuard;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
 
@@ -38,16 +39,27 @@ public class WebFetchTool implements AgentTool {
     private final Duration timeout;
     private final int maxFetchBytes;
     private final HttpClient httpClient;
+    private final SecretEgressGuard egressGuard;
 
     public WebFetchTool(List<String> allowedDomains, Duration timeout, int maxFetchBytes) {
-        this(allowedDomains, timeout, maxFetchBytes, HttpClient.newHttpClient());
+        this(allowedDomains, timeout, maxFetchBytes, HttpClient.newHttpClient(), null);
+    }
+
+    public WebFetchTool(List<String> allowedDomains, Duration timeout, int maxFetchBytes, SecretEgressGuard egressGuard) {
+        this(allowedDomains, timeout, maxFetchBytes, HttpClient.newHttpClient(), egressGuard);
     }
 
     WebFetchTool(List<String> allowedDomains, Duration timeout, int maxFetchBytes, HttpClient httpClient) {
+        this(allowedDomains, timeout, maxFetchBytes, httpClient, null);
+    }
+
+    WebFetchTool(List<String> allowedDomains, Duration timeout, int maxFetchBytes, HttpClient httpClient,
+                 SecretEgressGuard egressGuard) {
         this.allowedDomains = List.copyOf(allowedDomains);
         this.timeout = timeout;
         this.maxFetchBytes = maxFetchBytes;
         this.httpClient = httpClient;
+        this.egressGuard = egressGuard;
     }
 
     @Tool(name = "web_fetch",
@@ -71,6 +83,12 @@ public class WebFetchTool implements AgentTool {
         }
         if (!isAllowedHost(uri.getHost())) {
             return "Fehler: Domain '" + uri.getHost() + "' ist nicht erlaubt.";
+        }
+        if (egressGuard != null) {
+            SecretEgressGuard.EgressBlock egressBlock = egressGuard.checkEgress(uri.toString());
+            if (egressBlock != null) {
+                return egressBlock.message();
+            }
         }
 
         HttpRequest request = HttpRequest.newBuilder(uri)

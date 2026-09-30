@@ -1,5 +1,8 @@
 package biz.brumm.infrastructure.adapter.out.ai.tool;
 
+import biz.brumm.config.GuardrailProperties;
+import biz.brumm.domain.service.CredentialLeakGuard;
+import biz.brumm.domain.service.SecretEgressGuard;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
@@ -10,6 +13,7 @@ import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.List;
 import java.util.function.Consumer;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -104,6 +108,33 @@ class WebSearchToolTest {
 
         assertThat(tool.buildSearchUri("a b?c"))
                 .hasToString("https://api.duckduckgo.com?q=a+b%3Fc&format=json&no_html=1&skip_disambig=1");
+    }
+
+    @Test
+    void webSearchBlocksEgressOfSecretInQuery() throws Exception { // Spiegel-Test 771
+        GuardrailProperties props = new GuardrailProperties(true, List.of("TOPSECRET"), List.of());
+        SecretEgressGuard guard = new SecretEgressGuard(props, new CredentialLeakGuard(props, null));
+        withServer(exchange -> {
+            throw new AssertionError("Egress muss vor dem Netzwerkzugriff blockieren.");
+        }, base -> {
+            WebSearchTool tool = new WebSearchTool(base, 5, Duration.ofSeconds(5), guard);
+
+            assertThat(tool.webSearch("geheime Abfrage TOPSECRET"))
+                    .contains("Egress gesperrt")
+                    .contains("TOPSECRET");
+        });
+    }
+
+    @Test
+    void webSearchAllowsBoundSecretToEndpointHost() throws Exception { // Spiegel-Test 772
+        GuardrailProperties props = new GuardrailProperties(true, List.of("TOPSECRET"),
+                List.of(new GuardrailProperties.HostBinding("TOPSECRET", List.of("localhost"))));
+        SecretEgressGuard guard = new SecretEgressGuard(props, new CredentialLeakGuard(props, null));
+        withServer(exchange -> respond(exchange, 200, "{\"RelatedTopics\": []}"), base -> {
+            WebSearchTool tool = new WebSearchTool(base, 5, Duration.ofSeconds(5), guard);
+
+            assertThat(tool.webSearch("TOPSECRET")).contains("keine Treffer");
+        });
     }
 
     private void withServer(HttpHandler handler, Consumer<String> body) throws IOException {

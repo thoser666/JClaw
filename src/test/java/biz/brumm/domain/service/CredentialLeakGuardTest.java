@@ -23,7 +23,7 @@ class CredentialLeakGuardTest {
     private ChannelStore channelStore;
 
     private CredentialLeakGuard guard(boolean enabled, List<String> secrets) {
-        return new CredentialLeakGuard(new GuardrailProperties(enabled, secrets), channelStore);
+        return new CredentialLeakGuard(new GuardrailProperties(enabled, secrets, List.of()), channelStore);
     }
 
     @Test

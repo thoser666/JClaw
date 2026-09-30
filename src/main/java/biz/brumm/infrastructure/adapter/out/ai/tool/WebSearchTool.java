@@ -1,6 +1,7 @@
 package biz.brumm.infrastructure.adapter.out.ai.tool;
 
 import biz.brumm.domain.port.out.AgentTool;
+import biz.brumm.domain.service.SecretEgressGuard;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
 import tools.jackson.core.JacksonException;
@@ -41,19 +42,30 @@ public class WebSearchTool implements AgentTool {
     private final int maxResponseBytes;
     private final HttpClient httpClient;
     private final ObjectMapper objectMapper;
+    private final SecretEgressGuard egressGuard;
 
     public WebSearchTool(String endpoint, int maxResults, Duration timeout) {
-        this(endpoint, maxResults, timeout, DEFAULT_MAX_RESPONSE_BYTES, HttpClient.newHttpClient(), new ObjectMapper());
+        this(endpoint, maxResults, timeout, DEFAULT_MAX_RESPONSE_BYTES, HttpClient.newHttpClient(), new ObjectMapper(), null);
+    }
+
+    public WebSearchTool(String endpoint, int maxResults, Duration timeout, SecretEgressGuard egressGuard) {
+        this(endpoint, maxResults, timeout, DEFAULT_MAX_RESPONSE_BYTES, HttpClient.newHttpClient(), new ObjectMapper(), egressGuard);
     }
 
     WebSearchTool(String endpoint, int maxResults, Duration timeout, int maxResponseBytes,
                   HttpClient httpClient, ObjectMapper objectMapper) {
+        this(endpoint, maxResults, timeout, maxResponseBytes, httpClient, objectMapper, null);
+    }
+
+    WebSearchTool(String endpoint, int maxResults, Duration timeout, int maxResponseBytes,
+                  HttpClient httpClient, ObjectMapper objectMapper, SecretEgressGuard egressGuard) {
         this.endpoint = endpoint;
         this.maxResults = maxResults;
         this.timeout = timeout;
         this.maxResponseBytes = maxResponseBytes;
         this.httpClient = httpClient;
         this.objectMapper = objectMapper;
+        this.egressGuard = egressGuard;
     }
 
     @Tool(name = "web_search",
@@ -65,6 +77,12 @@ public class WebSearchTool implements AgentTool {
         }
         String normalized = query.strip();
         URI uri = buildSearchUri(normalized);
+        if (egressGuard != null) {
+            SecretEgressGuard.EgressBlock egressBlock = egressGuard.checkEgress(uri.toString());
+            if (egressBlock != null) {
+                return egressBlock.message();
+            }
+        }
         HttpRequest request = HttpRequest.newBuilder(uri)
                 .timeout(timeout)
                 .GET()

@@ -42,11 +42,11 @@ class ChannelServiceTest {
     }
 
     private static CredentialLeakGuard guardDisabled() {
-        return new CredentialLeakGuard(new GuardrailProperties(false, List.of()), null);
+        return new CredentialLeakGuard(new GuardrailProperties(false, List.of(), List.of()), null);
     }
 
     private static CredentialLeakGuard guardWithSecrets(List<String> secrets) {
-        return new CredentialLeakGuard(new GuardrailProperties(true, secrets), null);
+        return new CredentialLeakGuard(new GuardrailProperties(true, secrets, List.of()), null);
     }
 
     @Test

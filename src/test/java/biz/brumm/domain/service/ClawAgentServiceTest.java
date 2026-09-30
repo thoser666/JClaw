@@ -48,7 +48,7 @@ class ClawAgentServiceTest {
     private SessionService sessionService() {
         return new SessionService(sessionStore, conversationStore,
                 new SessionProperties("none", 4, 60),
-                new CredentialLeakGuard(new GuardrailProperties(false, List.of()), null));
+                new CredentialLeakGuard(new GuardrailProperties(false, List.of(), List.of()), null));
     }
 
     @Test

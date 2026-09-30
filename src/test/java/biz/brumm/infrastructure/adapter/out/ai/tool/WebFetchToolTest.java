@@ -1,5 +1,8 @@
 package biz.brumm.infrastructure.adapter.out.ai.tool;
 
+import biz.brumm.config.GuardrailProperties;
+import biz.brumm.domain.service.CredentialLeakGuard;
+import biz.brumm.domain.service.SecretEgressGuard;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
@@ -161,6 +164,35 @@ class WebFetchToolTest {
                     HttpClient.newHttpClient());
 
             assertThat(tool.webFetch(base + "/ok")).contains("ok");
+        });
+    }
+
+    @Test
+    void webFetchBlocksEgressOfSecretToUnboundHost() throws Exception { // Spiegel-Test 769
+        GuardrailProperties props = new GuardrailProperties(true, List.of("TOPSECRET"),
+                List.of(new GuardrailProperties.HostBinding("TOPSECRET", List.of("api.telegram.org"))));
+        SecretEgressGuard guard = new SecretEgressGuard(props, new CredentialLeakGuard(props, null));
+        withServer(exchange -> {
+            throw new AssertionError("Egress muss vor dem Netzwerkzugriff blockieren.");
+        }, base -> {
+            WebFetchTool tool = new WebFetchTool(List.of("localhost"), Duration.ofSeconds(5), 10_000, guard);
+
+            assertThat(tool.webFetch(base + "/?k=TOPSECRET"))
+                    .contains("Egress gesperrt")
+                    .contains("TOPSECRET")
+                    .contains("api.telegram.org");
+        });
+    }
+
+    @Test
+    void webFetchAllowsBoundSecretToBoundHost() throws Exception { // Spiegel-Test 770
+        GuardrailProperties props = new GuardrailProperties(true, List.of("TOPSECRET"),
+                List.of(new GuardrailProperties.HostBinding("TOPSECRET", List.of("localhost"))));
+        SecretEgressGuard guard = new SecretEgressGuard(props, new CredentialLeakGuard(props, null));
+        withServer(exchange -> respond(exchange, 200, "<html><body>ergebniscache</body></html>"), base -> {
+            WebFetchTool tool = new WebFetchTool(List.of("localhost"), Duration.ofSeconds(5), 10_000, guard);
+
+            assertThat(tool.webFetch(base + "/?k=TOPSECRET")).contains("ergebniscache");
         });
     }
 

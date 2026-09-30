@@ -26,7 +26,7 @@ class ConversationQueryServiceTest {
 
     @Test
     void getConversationReturnsStoredMessages() {
-        ConversationQueryService service = service(new GuardrailProperties(false, List.of()));
+        ConversationQueryService service = service(new GuardrailProperties(false, List.of(), List.of()));
         when(conversationStore.findByContextId("ctx-1")).thenReturn(List.of(
                 new ConversationMessage("USER", "Hallo"),
                 new ConversationMessage("ASSISTANT", "Hi!")));
@@ -39,7 +39,7 @@ class ConversationQueryServiceTest {
 
     @Test
     void getConversationWithBlankContextIdReturnsEmpty() {
-        ConversationQueryService service = service(new GuardrailProperties(false, List.of()));
+        ConversationQueryService service = service(new GuardrailProperties(false, List.of(), List.of()));
 
         assertThat(service.getConversation(" ")).isEmpty();
         assertThat(service.getConversation(null)).isEmpty();
@@ -47,7 +47,7 @@ class ConversationQueryServiceTest {
 
     @Test
     void getConversationReturnsEmptyForUnknownContext() {
-        ConversationQueryService service = service(new GuardrailProperties(false, List.of()));
+        ConversationQueryService service = service(new GuardrailProperties(false, List.of(), List.of()));
         when(conversationStore.findByContextId("unbekannt")).thenReturn(List.of());
 
         assertThat(service.getConversation("unbekannt")).isEmpty();
@@ -56,7 +56,7 @@ class ConversationQueryServiceTest {
     @Test
     void getConversationRedactsKnownSecretFromMessageTexts() {
         ConversationQueryService service = service(
-                new GuardrailProperties(true, List.of("TOPSECRET")));
+                new GuardrailProperties(true, List.of("TOPSECRET"), List.of()));
         when(conversationStore.findByContextId("ctx-1")).thenReturn(List.of(
                 new ConversationMessage("USER", "Passwort TOPSECRET im Chat"),
                 new ConversationMessage("ASSISTANT", "Ok, [REDACTED] gemeint")));
