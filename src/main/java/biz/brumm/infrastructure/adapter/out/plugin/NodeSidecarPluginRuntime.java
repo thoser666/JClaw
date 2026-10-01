@@ -42,6 +42,12 @@ import java.util.concurrent.ConcurrentHashMap;
  * <p>
  * Activity ist opt-in ({@code jclaw.agent.plugins.runtime.enabled=true}); ohne aktivierte
  * Laufzeit bleibt nur die Control-Plane (Manifest-Validierung) aktiv.
+ * <p>
+ * Install-Provenance (P4-09, fail-closed): Vor dem Laden prüft {@link PluginInstallProvenanceGuard},
+ * ob das Plugin über eine vertrauenswürdige Install-Quelle (Standard {@code bundled}/{@code catalog})
+ * oder eine explizite Freigabe ({@code trusted-sources}/{@code allow} = OpenClaw {@code --force})
+ * verfügt. Blockierte Plugins (fehlende/ungültige Provenance) bleiben Control-Plane-only und werden
+ * nie in den Sidecar geladen.
  */
 @Component
 @ConditionalOnProperty(prefix = "jclaw.agent.plugins.runtime", name = "enabled", havingValue = "true")
@@ -51,6 +57,7 @@ public class NodeSidecarPluginRuntime implements Closeable {
 
     private final PluginProvider pluginProvider;
     private final EntryPointResolver entryPointResolver;
+    private final PluginInstallProvenanceGuard provenanceGuard;
     private final ObjectMapper objectMapper;
     private final long callTimeoutMillis;
 
@@ -61,6 +68,7 @@ public class NodeSidecarPluginRuntime implements Closeable {
                                     PluginRuntimeProperties properties) {
         this.pluginProvider = pluginProvider;
         this.entryPointResolver = new EntryPointResolver(objectMapper);
+        this.provenanceGuard = new PluginInstallProvenanceGuard(objectMapper, properties);
         this.objectMapper = objectMapper;
         this.callTimeoutMillis = properties.callTimeoutMillis();
     }
@@ -81,10 +89,17 @@ public class NodeSidecarPluginRuntime implements Closeable {
     /**
      * Lädt ein einzelnes Plugin.
      *
-     * @return {@link Optional#empty()}, wenn kein Entry-Point (Code) im Bundle existiert —
+     * @return {@link Optional#empty()}, wenn keine vertrauenswürdige Install-Provenance vorliegt
+     *         (P4-09, fail-closed) oder kein Entry-Point (Code) im Bundle existiert —
      *         das Plugin bleibt dann Control-Plane-only.
      */
     public Optional<PluginLoadReceipt> load(Plugin plugin) throws IOException, SidecarCallException, SidecarTimeoutException {
+        Optional<PluginInstallProvenanceGuard.ProvenanceBlock> provenanceBlock = provenanceGuard.checkLoad(plugin);
+        if (provenanceBlock.isPresent()) {
+            log.warn("Plugin '{}' wird NICHT in den Sidecar geladen (Install-Provenance): {} (Control-Plane-only).",
+                    plugin.id(), provenanceBlock.get().message());
+            return Optional.empty();
+        }
         Optional<Path> entryFile = entryPointResolver.resolve(Path.of(plugin.baseDir()));
         if (entryFile.isEmpty()) {
             log.info("Plugin '{}' hat keinen auflösbaren Entry-Point - nur Control-Plane.", plugin.id());

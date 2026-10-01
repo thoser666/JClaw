@@ -86,6 +86,8 @@ Die JSON5-Datei wird beim Start automatisch geladen und überschreibt Werte aus 
 | `jclaw.agent.plugins.dir` | `./plugins` | Verzeichnis mit Plugin-Ordnern (Manifeste) |
 | `jclaw.agent.plugins.runtime.enabled` | `false` | Schaltet die Plugin-Laufzeit frei (P4-01, Node-Sidecar; nur `true` startet den Sidecar, Deny-by-Default) |
 | `jclaw.agent.plugins.runtime.call-timeout-millis` | `15000` | Call-Timeout für Sidecar-Aufrufe der Plugin-Runtime |
+| `jclaw.agent.plugins.runtime.trusted-sources` | `bundled,catalog` | Install-Quellen, die ohne weitere Freigabe vertraut werden (Plugin-Install-Provenance, P4-09) |
+| `jclaw.agent.plugins.runtime.allow` | `-` (leer) | Pinned Plugin-Ids, die auch aus beliebigen Quellen geladen werden dürfen (Spiegel zu OpenClaw `plugins.allow` / `--force`) |
 | `jclaw.agent.skills.dir` | `./skills` | Verzeichnis mit Skill-Ordnern (`SKILL.md`) |
 | `jclaw.agent.skills.enabled` | `-` (leer) | Namen der zu ladenden Skills (leer = keine Skills aktiv) |
 | `jclaw.agent.filetool.workdir` | `-` (nicht gesetzt) | Arbeitsverzeichnis der Datei-Werkzeuge. Erst wenn gesetzt, werden `readFile`, `listDirectory`, `writeFile`, `glob`, `grep` und `apply_patch` registriert (Deny-by-Default) |

@@ -89,6 +89,7 @@ class NodeSidecarPluginRuntimeTest {
         Path pluginDir = Files.createDirectories(tempDir.resolve("main-plugin"));
         write(pluginDir, "openclaw.plugin.json", "{\"id\":\"acme/main\"}");
         write(pluginDir, "package.json", "{\"name\":\"main-plugin\",\"main\":\"src/entry.js\"}");
+        write(pluginDir, ".jclaw/install.json", "{\"source\":\"bundled\"}");
         write(pluginDir, "src/entry.js", """
                 module.exports = definePluginEntry({
                   id: 'acme/main',
@@ -544,11 +545,83 @@ class NodeSidecarPluginRuntimeTest {
         }
     }
 
+    @Test
+    @EnabledIf("nodeAvailable")
+    void pluginWithoutInstallProvenanceStaysControlPlaneOnly() throws IOException {
+        Path pluginsDir = tempDir.resolve("noprov");
+        Files.createDirectories(pluginsDir);
+        Path plugin = Files.createDirectories(pluginsDir.resolve("acme-noprov"));
+        write(plugin, "openclaw.plugin.json", "{\"id\":\"acme/noprov\"}");
+        write(plugin, "src/index.js", """
+                module.exports = definePluginEntry({
+                  id: 'acme/noprov', name: 'No Prov',
+                  register(api) { api.registerTool({ name: 'noprov-tool', description: '.', execute() { return { ok: true }; } }); }
+                });
+                """);
+
+        try (NodeSidecarPluginRuntime runtime = runtime(pluginsDir)) {
+            List<NodeSidecarPluginRuntime.PluginLoadReceipt> loaded = runtime.loadAvailable();
+
+            assertThat(loaded).isEmpty();
+            assertThat(runtime.isLoaded("acme/noprov")).isFalse();
+            assertThat(runtime.active()).isFalse();
+            assertThat(runtime.tools()).extracting(t -> t.name())
+                    .doesNotContain("noprov-tool");
+        }
+    }
+
+    @Test
+    @EnabledIf("nodeAvailable")
+    void arbitrarySourcePluginIsNotLoadedWithoutPin() throws IOException {
+        Path plugin = pluginDir("localblock", "acme/localblock", """
+                module.exports = definePluginEntry({
+                  id: 'acme/localblock', name: 'Loc Block',
+                  register(api) { api.registerTool({ name: 'localblock-tool', description: '.', execute() { return { ok: true }; } }); }
+                });
+                """);
+        write(plugin, ".jclaw/install.json", "{\"source\":\"git\"}");
+        Plugin pluginModel = plugin(tempDir, "acme/localblock");
+
+        try (NodeSidecarPluginRuntime runtime = runtime(tempDir)) {
+            Optional<NodeSidecarPluginRuntime.PluginLoadReceipt> receipt = runtime.load(pluginModel);
+
+            assertThat(receipt).isEmpty();
+            assertThat(runtime.isLoaded("acme/localblock")).isFalse();
+            assertThat(runtime.active()).isFalse();
+        }
+    }
+
+    @Test
+    @EnabledIf("nodeAvailable")
+    void arbitrarySourcePluginIsLoadedWhenPinnedInAllow() throws IOException {
+        Path plugin = pluginDir("localpin", "acme/localpin", """
+                module.exports = definePluginEntry({
+                  id: 'acme/localpin', name: 'Loc Pin',
+                  register(api) { api.registerTool({ name: 'localpin-tool', description: '.', execute() { return { ok: true }; } }); }
+                });
+                """);
+        write(plugin, ".jclaw/install.json", "{\"source\":\"local\"}");
+        Plugin pluginModel = plugin(tempDir, "acme/localpin");
+
+        try (NodeSidecarPluginRuntime runtime = runtime(tempDir, List.of("acme/localpin"))) {
+            Optional<NodeSidecarPluginRuntime.PluginLoadReceipt> receipt = runtime.load(pluginModel);
+
+            assertThat(receipt).isPresent();
+            assertThat(runtime.isLoaded("acme/localpin")).isTrue();
+            assertThat(runtime.tools()).extracting(t -> t.name())
+                    .contains("localpin-tool");
+        }
+    }
+
     private NodeSidecarPluginRuntime runtime(Path pluginsDir) {
+        return runtime(pluginsDir, List.of());
+    }
+
+    private NodeSidecarPluginRuntime runtime(Path pluginsDir, List<String> allow) {
         FileSystemPluginProvider provider = new FileSystemPluginProvider(
                 new PluginProperties(pluginsDir.toString()), objectMapper);
         return new NodeSidecarPluginRuntime(provider, objectMapper,
-                new PluginRuntimeProperties(true, 15_000));
+                new PluginRuntimeProperties(true, 15_000, List.of("bundled", "catalog"), allow));
     }
 
     private Path pluginDir(String name, String id, String entrySource) throws IOException {
@@ -559,6 +632,7 @@ class NodeSidecarPluginRuntimeTest {
         Files.createDirectories(dir);
         write(dir, "openclaw.plugin.json", "{\"id\":\"" + id + "\"}");
         write(dir, "src/index.js", entrySource);
+        write(dir, ".jclaw/install.json", "{\"source\":\"bundled\"}");
         return dir;
     }
 
