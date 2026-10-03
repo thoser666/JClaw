@@ -89,3 +89,24 @@ CREATE TABLE IF NOT EXISTS channel_ingress_item (
 );
 
 CREATE INDEX IF NOT EXISTS idx_channel_ingress_item_seen ON channel_ingress_item(channel_id, seen_at);
+
+CREATE TABLE IF NOT EXISTS session_goal (
+    session_id VARCHAR(255) PRIMARY KEY,
+    objective CLOB NOT NULL,
+    status VARCHAR(32) NOT NULL,
+    status_note CLOB,
+    token_budget BIGINT,
+    created_at TIMESTAMP NOT NULL,
+    completed_at TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS follow_up (
+    id VARCHAR(255) PRIMARY KEY,
+    session_id VARCHAR(255) NOT NULL,
+    prompt CLOB NOT NULL,
+    created_at TIMESTAMP NOT NULL,
+    delivered_at TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_follow_up_session ON follow_up(session_id);
+CREATE INDEX IF NOT EXISTS idx_follow_up_pending ON follow_up(delivered_at);

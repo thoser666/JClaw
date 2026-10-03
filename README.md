@@ -528,6 +528,18 @@ Zusätzlich zur Agent-API stehen Gateway-Endpoints zur Verfügung:
 | `/api/v1/cron-jobs/{id}` | PUT | Cron-Job aktualisieren |
 | `/api/v1/cron-jobs/{id}` | DELETE | Cron-Job löschen |
 | `/api/v1/cron-jobs/{id}/execute` | POST | Cron-Job manuell ausführen |
+| `/api/v1/sessions/{id}/goal` | GET | Aktuelles Session-Ziel abfragen (404 ohne Ziel) |
+| `/api/v1/sessions/{id}/goal/start` | POST | Ziel starten (`{"objective": "..."}`; 409 wenn bereits eins existiert) |
+| `/api/v1/sessions/{id}/goal/edit` | POST | Ziel umformulieren (`{"objective": "..."}`) |
+| `/api/v1/sessions/{id}/goal/pause` | POST | Ziel pausieren |
+| `/api/v1/sessions/{id}/goal/resume` | POST | Ziel fortsetzen (409 nach complete) |
+| `/api/v1/sessions/{id}/goal/block` | POST | Ziel blockieren |
+| `/api/v1/sessions/{id}/goal/complete` | POST | Ziel abschließen (`{"note": "..."}` optional, terminal) |
+| `/api/v1/sessions/{id}/goal` | DELETE | Ziel löschen (clear) |
+| `/api/v1/sessions/{id}/follow-ups` | POST | Follow-up einreihen (`{"prompt": "..."}`, persistiert über Neustarts) |
+| `/api/v1/sessions/{id}/follow-ups` | GET | Offene Follow-ups auflisten |
+| `/api/v1/sessions/{id}/follow-ups/drain` | POST | Offene Follow-ups ausführen (explizit, keine Auto-Ausführung) |
+| `/api/v1/follow-ups/{id}` | DELETE | Einzelnen Follow-up abbrechen |
 | `/api/v1/memory/{contextId}/sync` | POST | Konversation als Vault-Dokument materialisieren |
 | `/api/v1/memory` | GET | Alle Memory-Vault-Dokumente auflisten |
 | `/api/v1/channels` | GET | Alle Channels auflisten |
@@ -589,6 +601,14 @@ Wiederkehrende Agent-Jobs mit Cron-Ausdrücken:
 * **Intervall:** `jclaw.cron.interval` (Standard: 60s) — Wie oft auf fällige Jobs geprüft wird
 * **Cron-Syntax:** 5 Felder — `Minute Stunde Tag Monat Wochentag` (z.B. `0 */6 * * *` = alle 6 Stunden)
 * **REST-API:** `GET|POST|PUT|DELETE /api/v1/cron-jobs`, `POST /api/v1/cron-jobs/{id}/execute`
+
+### Goals & Follow-up-Queue (P4-07)
+
+Dauerhaftes Session-Ziel und persistente Folge-Prompts (OpenClaw 2026.8.x):
+
+* **Goals:** ein Ziel pro Session (`session_goal`-Tabelle, überlebt Gateway-Neustarts), Statusmaschine `active/paused/blocked/budget_limited/usage_limited/complete` (`complete` ist terminal), REST-Spiegel `/api/v1/sessions/{id}/goal` von `/goal start|edit|pause|resume|block|complete|clear`
+* **Follow-up-Queue:** `follow_up`-Tabelle, enqueue/list/drain explizit — **keine Auto-Ausführung** beim Start (Deny-by-Default); offene Follow-ups werden beim Drain an den Agenten gesendet, Fehler lassen den Eintrag in der Queue
+* **REST-API:** `GET|POST|DELETE /api/v1/sessions/{id}/goal...`, `POST /api/v1/sessions/{id}/follow-ups`, `POST .../follow-ups/drain`
 
 ### Channels (P3-01)
 
