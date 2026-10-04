@@ -540,6 +540,10 @@ Zusätzlich zur Agent-API stehen Gateway-Endpoints zur Verfügung:
 | `/api/v1/sessions/{id}/follow-ups` | GET | Offene Follow-ups auflisten |
 | `/api/v1/sessions/{id}/follow-ups/drain` | POST | Offene Follow-ups ausführen (explizit, keine Auto-Ausführung) |
 | `/api/v1/follow-ups/{id}` | DELETE | Einzelnen Follow-up abbrechen |
+| `/api/v1/sessions/{id}/background-tasks` | POST | Task im Hintergrund starten (202, sofort, `{"prompt": "..."}`) |
+| `/api/v1/sessions/{id}/background-tasks` | GET | Background-Tasks einer Session (neueste zuerst) |
+| `/api/v1/background-tasks/{id}` | GET | Status eines Background-Tasks |
+| `/api/v1/background-tasks/{id}/events` | GET | SSE: Completion-Benachrichtigung (`event: completion`) |
 | `/api/v1/memory/{contextId}/sync` | POST | Konversation als Vault-Dokument materialisieren |
 | `/api/v1/memory` | GET | Alle Memory-Vault-Dokumente auflisten |
 | `/api/v1/channels` | GET | Alle Channels auflisten |
@@ -609,6 +613,14 @@ Dauerhaftes Session-Ziel und persistente Folge-Prompts (OpenClaw 2026.8.x):
 * **Goals:** ein Ziel pro Session (`session_goal`-Tabelle, überlebt Gateway-Neustarts), Statusmaschine `active/paused/blocked/budget_limited/usage_limited/complete` (`complete` ist terminal), REST-Spiegel `/api/v1/sessions/{id}/goal` von `/goal start|edit|pause|resume|block|complete|clear`
 * **Follow-up-Queue:** `follow_up`-Tabelle, enqueue/list/drain explizit — **keine Auto-Ausführung** beim Start (Deny-by-Default); offene Follow-ups werden beim Drain an den Agenten gesendet, Fehler lassen den Eintrag in der Queue
 * **REST-API:** `GET|POST|DELETE /api/v1/sessions/{id}/goal...`, `POST /api/v1/sessions/{id}/follow-ups`, `POST .../follow-ups/drain`
+
+### Background-Sessions (P4-08)
+
+Agent-Tasks asynchron im Hintergrund ausführen (OpenClaw 2026.8.x):
+
+* **Start ohne Blockieren:** `POST /api/v1/sessions/{id}/background-tasks` liefert sofort `202 Accepted` und führt den Prompt über den Agenten asynchron aus
+* **Persistenz:** `background_task`-Tabelle (H2) überlebt Gateway-Neustarts; verwaiste `RUNNING`-Tasks werden beim Start als `FAILED` markiert
+* **Completion-Benachrichtigung:** Status via `GET /api/v1/background-tasks/{id}` oder SSE-Push `GET /api/v1/background-tasks/{id}/events` (`event: completion` bei terminalem Status)
 
 ### Channels (P3-01)
 

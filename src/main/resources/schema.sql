@@ -110,3 +110,17 @@ CREATE TABLE IF NOT EXISTS follow_up (
 
 CREATE INDEX IF NOT EXISTS idx_follow_up_session ON follow_up(session_id);
 CREATE INDEX IF NOT EXISTS idx_follow_up_pending ON follow_up(delivered_at);
+
+CREATE TABLE IF NOT EXISTS background_task (
+    id VARCHAR(255) PRIMARY KEY,
+    session_id VARCHAR(255) NOT NULL,
+    prompt CLOB NOT NULL,
+    status VARCHAR(32) NOT NULL,
+    result CLOB,
+    error_message CLOB,
+    created_at TIMESTAMP NOT NULL,
+    started_at TIMESTAMP,
+    completed_at TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_background_task_session ON background_task(session_id);
