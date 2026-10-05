@@ -622,6 +622,15 @@ Agent-Tasks asynchron im Hintergrund ausführen (OpenClaw 2026.8.x):
 * **Persistenz:** `background_task`-Tabelle (H2) überlebt Gateway-Neustarts; verwaiste `RUNNING`-Tasks werden beim Start als `FAILED` markiert
 * **Completion-Benachrichtigung:** Status via `GET /api/v1/background-tasks/{id}` oder SSE-Push `GET /api/v1/background-tasks/{id}/events` (`event: completion` bei terminalem Status)
 
+### Paritäts-Testsuite (P4-05)
+
+Automatisierte Konformitäts-Checks als CI-Gate (Basis für P4-16 Stable API) im Paket `biz.brumm.conformity`:
+
+* **API-Surface:** `ApiSurfaceConformityTest` introspiziert `RequestMappingHandlerMapping` und erzwingt den 1:1-Abgleich mit dem deklarierten API-Contract (51 Endpoints) — neue/entfernte/umbenannte Routen brechen den Test
+* **Konfig-Konformität:** OpenClaw-Referenz-Fixiture (`fixtures/config/openclaw-reference.json5`) muss laden und validieren; legitime OpenClaw-Sektionen (`channels`, `security`, `auth`, `memory`, `compaction`, `background`, `config`) werden akzeptiert, unbekannte Sektionen bleiben strikt verboten
+* **Guardrail-Deny-by-Default-Gate:** Guardrail-Beans verdrahtet; alle Feature-Schalter und Policy-Listen im Auslieferungszustand aus
+* **Tool-Schema:** aktivierte Agent-Tools liefern wohlgeformte LLM-Schemas (Name, Beschreibung, `type: object`); Kern-Tools `calculate`/`getCurrentDateTime` immer exponiert
+
 ### Channels (P3-01)
 
 Abstraktionsschicht für externe Nachrichten-Plattformen (Telegram, Slack, Discord, etc.):

@@ -16,7 +16,11 @@ public class Json5ConfigValidator {
     private static final Set<String> KNOWN_TOP_LEVEL_PREFIXES = Set.of(
             "gateway", "agents", "session", "tools", "skills", "plugins",
             "cron", "hooks", "mcp", "heartbeat", "messages", "models",
-            "providers", "env", "$include"
+            "providers", "env", "$include",
+            // OpenClaw-Parität (P4-05): legitime OpenClaw-Konfigurationssektionen
+            // dürfen Start-ups nicht abbrechen, auch wenn sie hier noch keine
+            // dedizierte Verarbeitung haben.
+            "channels", "security", "auth", "memory", "compaction", "background", "config"
     );
 
     private static final Set<String> VALID_SESSION_RESET_MODES = Set.of("none", "daily", "idle");

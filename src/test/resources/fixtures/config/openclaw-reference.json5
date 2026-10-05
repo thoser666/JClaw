@@ -1,0 +1,55 @@
+// JClaw-Referenzkonfiguration für die Paritäts-Testsuite (P4-05).
+// Spiegel zu OpenClaw: Kommentare, Trailing Commas und OpenClaw-Kurzschlüssel.
+// Diese Datei muss durch Json5ConfigLoader geladen UND Json5ConfigValidator valide sein.
+
+{
+  "agents": {
+    "max-iterations": 8,
+    "max-history-messages": 10,
+    "plugins": { "dir": "./plugins" },
+    "skills": { "dir": "./skills", "enabled": [] },
+    "spawnagent": { "enabled": false, "max-depth": 3 },
+    "filetool": { "enabled": false },
+  },
+
+  "session": {
+    "reset-mode": "idle",
+    "reset-at-hour": 4,
+    "reset-idle-minutes": 60,
+  },
+
+  "mcp": {
+    "enabled": false,
+    "request-timeout": 30,
+  },
+
+  "tools": {
+    "allow": "",
+    "deny": "",
+  },
+
+  "cron": {
+    "enabled": false,
+    "interval": 60,
+  },
+
+  "hooks": {
+    "dir": "./hooks",
+  },
+
+  "gateway": {
+    "port": 8080,
+  },
+
+  "env": {
+    "JCLAW_ENV_REFERENCE": "parity-suite",
+  },
+
+  // OpenClaw-Paritätssektionen (dürfen den Start nicht verhindern)
+  "channels": { "enabled": false },
+  "security": { "guardrail": { "enabled": false } },
+  "auth": { "enabled": false },
+  "memory": { "vault": { "dir": "./vault" } },
+  "compaction": { "enabled": false },
+  "background": { "enabled": false },
+}

@@ -132,7 +132,7 @@ Semantisches Memory und Skill-Ops abseits des Kern-Loaders.
 
 | ID | Baustein | Beschreibung | PrioritÃ¤t | Status |
 |---|---|---|---|---|
-| P4-05 | ParitÃ¤ts-Testsuite | Automatisierte KonformitÃ¤ts-Checks: Manifeste, Konfig, Hooks, Tool-Schemas gegen OpenClaw-Referenz; **Guardrail-Tests**: kein Credential-Leak in Outbound, Egress-Binding (umgesetzt, Spiegel-Test 763-772 grün), Deny-by-Default | ðŸŸ¡ | â¬œ |
+| P4-05 | Paritäts-Testsuite | **Neu:** **Paritäts-Testsuite umgesetzt (hermetisches Binding, Spiegel-Test 856-867 grün)** — `biz.brumm.conformity`: API-Surface 1:1-Abgleich (`ApiSurfaceConformityTest`, `RequestMappingHandlerMapping`-Introspection gegen den API-Contract, 51 dokumentierte Endpoints, keine undokumentierten Routen), Konfig-Konformität gegen OpenClaw-Referenz (`fixtures/config/openclaw-reference.json5`; legitime OpenClaw-Sektionen `channels`/`security`/`auth`/`memory`/`compaction`/`background`/`config` werden akzeptiert, Unbekanntes bleibt strikt), Guardrail-Deny-by-Default-Gate (Beans verdrahtet; Feature-Schalter und Policy-Listen aus), Tool-Schema-Wohlgeformtheit (exakt das `ToolCallbacks`-Muster des `OllamaAiAdapter`; `calculate`/`getCurrentDateTime` immer exponiert) | 🟡 | ✅ |
 | P4-06 | Skill Workshop | Vorschlags-Verwaltung (`skills.workshop.*`): Proposals, apply/reject/quarantine, `approvalPolicy: "pending"` (seit 2026.6.1) | ðŸŸ¢ | â¬œ |
 
 ---
@@ -149,7 +149,7 @@ Die Bausteine werden nicht einzeln, sondern in Versionen mit einem in sich gesch
 | **0.4.0** | Channels | P3-06 Weitere Channels (IRC âœ…, Email âœ…, Mattermost âœ…, Google Chat âœ…, Feishu âœ…, Synology Chat âœ…, X âœ…, ClickClack âœ…, Buzz (Nostr) âœ…), P3-07 Media-Message-Support, P3-08 Ingress-Monitor âœ…, ~~P2-05~~ âœ… Control-UI | Nutzbares Multi-Plattform-Produkt |
 | **0.5.0** | Automations & Memory | P4-07 Goals & Queues, P4-08 Background-Sessions, P4-02 Wissen-Memory, P4-10 Backup & Restore | Zeit-/eventgetriebene Agent-AusfÃ¼hrung + Wissensspeicher |
 | **0.6.0** | Browser, Talk & Voice | P4-11 Browser-Steuerung, P4-12 Computer Use, P4-13 Talk, P4-14 Voice Calls & TTS-Personas | OpenClaw-2026.8.x-Features fÃ¼r Realtime & Desktop-Steuerung |
-| **1.0.0** | 100 % ParitÃ¤t | ~~P1-11~~ âœ… Hooks, ~~P1-10~~ âœ… Compaction, P4-03 Media-Provider, P4-05 ParitÃ¤ts-Testsuite, P4-06 Skill Workshop, P4-01 Plugin-Laufzeit | Feature-ParitÃ¤t, erste stabile Version |
+| **1.0.0** | 100 % ParitÃ¤t | ~~P1-11~~ âœ… Hooks, ~~P1-10~~ âœ… Compaction, P4-03 Media-Provider, ~~P4-05 ParitÃ¤ts-Testsuite~~ âœ…, P4-06 Skill Workshop, P4-01 Plugin-Laufzeit | Feature-ParitÃ¤t, erste stabile Version |
 
 Anmerkungen:
 
