@@ -90,6 +90,10 @@ Die JSON5-Datei wird beim Start automatisch geladen und überschreibt Werte aus 
 | `jclaw.agent.plugins.runtime.allow` | `-` (leer) | Pinned Plugin-Ids, die auch aus beliebigen Quellen geladen werden dürfen (Spiegel zu OpenClaw `plugins.allow` / `--force`) |
 | `jclaw.agent.skills.dir` | `./skills` | Verzeichnis mit Skill-Ordnern (`SKILL.md`) |
 | `jclaw.agent.skills.enabled` | `-` (leer) | Namen der zu ladenden Skills (leer = keine Skills aktiv) |
+| `jclaw.agent.skills.workshop.approvalPolicy` | `pending` | Freigabepolitik für agent-initiierte Workshop-Aktionen (`pending` oder `auto`; Spiegel zu OpenClaw `skills.workshop.approvalPolicy`) |
+| `jclaw.agent.skills.workshop.maxPending` | `50` | Max. Anzahl PENDING + QUARANTINED Vorschläge pro Workspace |
+| `jclaw.agent.skills.workshop.maxSkillBytes` | `40000` | Maximale Größe eines Proposal-Bodys in Bytes |
+| `jclaw.agent.skills.workshop.autonomous.enabled` | `false` | Erlaubt agentengetriebenes Auto-Anlegen von Vorschlägen (P4-06, als Vorgriff gespiegelt) |
 | `jclaw.agent.filetool.workdir` | `-` (nicht gesetzt) | Arbeitsverzeichnis der Datei-Werkzeuge. Erst wenn gesetzt, werden `readFile`, `listDirectory`, `writeFile`, `glob`, `grep` und `apply_patch` registriert (Deny-by-Default) |
 | `jclaw.agent.filetool.max-read-bytes` | `1048576` (1 MiB) | Maximale Dateigröße, die der Agent lesen darf |
 | `jclaw.agent.shelltool.enabled` | `false` | Schaltet das `runCommand`-Werkzeug frei (nur `true` registriert es, Deny-by-Default) |
@@ -185,6 +189,16 @@ Prüfe Änderungen auf Fehler ...
 * Pflichtkonzept: `name` (Fallback: Ordnername) und `description`.
 * Nur per `jclaw.agent.skills.enabled` aktivierte Skills werden in den System-Prompt aufgenommen (Deny-by-Default).
 * Unterverzeichnisse ohne `SKILL.md`/`skill.md` oder ohne gültiges Frontmatter werden übersprungen.
+
+### Skill-Workshop (P4-06)
+
+Der Skill-Workshop ist ein **Control-Plane**-Spiegel von OpenClaws `skills.workshop.*`-Vorschlagsverwaltung: Der Agent erzeugt Skill-Vorschläge, die per REST angewendet, abgelehnt oder quarantäniert werden können. Ein Vorschlag (`SkillProposal`) hat eine öffentliche ID (`<slug>-<seq>`, z. B. `morning-catchup-001`), den Typ `CREATE`/`UPDATE` und durchläuft den Lebenszyklus `PENDING → APPLIED / REJECTED / QUARANTINED / STALE`. Regeln:
+
+* **CREATE ist No-Clobber:** Der Ziel-Skill darf bei der Anlage nicht existieren; taucht er vor `apply` auf, wird der Vorschlag `STALE`.
+* **UPDATE bindet an den Ziel-Hash:** Ändert sich die Zieldatei vor `apply`, wird der Vorschlag `STALE` (Status `STALE`, Konflikt-409).
+* **`approvalPolicy: "pending"`:** Agent-initiierte Lifecycle-Aktionen (im Request per `agentInitiated: true` markiert) brauchen dann Operator-Freigabe → 403 `APPROVAL_REQUIRED`. Die REST-Aufrufe selbst sind der Operator-Kanal und nie blockiert.
+* **`maxPending`:** deckelt PENDING + QUARANTINED Vorschläge (OpenClaw-Default 50); `maxSkillBytes` deckelt den Body (Default 40.000).
+* **`apply`** ist der einzige Live-Write: Er materialisiert den Skill im AgentSkills-Format (`<skills.dir>/<name>/SKILL.md`.
 
 ## Plugins (Control-Plane)
 
@@ -411,6 +425,20 @@ Antwort (HTTP 200):
 
 * `enabled` gibt an, ob der Skill per `jclaw.agent.skills.enabled` aktiviert ist.
 
+#### Skill-Workshop-Endpoints (P4-06, unter `/api/v1/skills/workshop`)
+
+| Endpoint | Methode | Beschreibung |
+|---|---|---|
+| `/api/v1/skills/workshop` | GET | Workshop-Konfiguration (`approvalPolicy`, `maxPending`, `maxSkillBytes`, `autonomousEnabled`) |
+| `/api/v1/skills/workshop/proposals` | POST | Vorschlag anlegen (CREATE; Body: `name`, `description`, `content`) |
+| `/api/v1/skills/workshop/proposals/update` | POST | Vorschlag zum Aktualisieren (UPDATE; bindet an Hash der Zieldatei) |
+| `/api/v1/skills/workshop/proposals` | GET | Alle Vorschläge (älteste zuerst) |
+| `/api/v1/skills/workshop/proposals/{proposalId}` | GET | Ein Vorschlag (`inspect`) |
+| `/api/v1/skills/workshop/proposals/{proposalId}/revise` | POST | Vorschlag überarbeiten (nur PENDING) |
+| `/api/v1/skills/workshop/proposals/{proposalId}/apply` | POST | Vorschlag anwenden (schreibt den Skill; 409 bei STALE, 403 bei Approval-Gate) |
+| `/api/v1/skills/workshop/proposals/{proposalId}/reject` | POST | Vorschlag ablehnen (Body optional: `reason`, `agentInitiated`) |
+| `/api/v1/skills/workshop/proposals/{proposalId}/quarantine` | POST | Vorschlag quarantänieren (Body optional: `reason`, `agentInitiated`) |
+
 ### Verfügbare Plugins auflisten
 
 `GET /api/v1/plugins`
@@ -626,7 +654,7 @@ Agent-Tasks asynchron im Hintergrund ausführen (OpenClaw 2026.8.x):
 
 Automatisierte Konformitäts-Checks als CI-Gate (Basis für P4-16 Stable API) im Paket `biz.brumm.conformity`:
 
-* **API-Surface:** `ApiSurfaceConformityTest` introspiziert `RequestMappingHandlerMapping` und erzwingt den 1:1-Abgleich mit dem deklarierten API-Contract (51 Endpoints) — neue/entfernte/umbenannte Routen brechen den Test
+* **API-Surface:** `ApiSurfaceConformityTest` introspiziert `RequestMappingHandlerMapping` und erzwingt den 1:1-Abgleich mit dem deklarierten API-Contract (60 Endpoints) — neue/entfernte/umbenannte Routen brechen den Test
 * **Konfig-Konformität:** OpenClaw-Referenz-Fixiture (`fixtures/config/openclaw-reference.json5`) muss laden und validieren; legitime OpenClaw-Sektionen (`channels`, `security`, `auth`, `memory`, `compaction`, `background`, `config`) werden akzeptiert, unbekannte Sektionen bleiben strikt verboten
 * **Guardrail-Deny-by-Default-Gate:** Guardrail-Beans verdrahtet; alle Feature-Schalter und Policy-Listen im Auslieferungszustand aus
 * **Tool-Schema:** aktivierte Agent-Tools liefern wohlgeformte LLM-Schemas (Name, Beschreibung, `type: object`); Kern-Tools `calculate`/`getCurrentDateTime` immer exponiert

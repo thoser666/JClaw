@@ -7,7 +7,12 @@
     "max-iterations": 8,
     "max-history-messages": 10,
     "plugins": { "dir": "./plugins" },
-    "skills": { "dir": "./skills", "enabled": [] },
+    "skills": { "dir": "./skills", "enabled": [], "workshop": {
+      "approvalPolicy": "pending",
+      "maxPending": 50,
+      "maxSkillBytes": 40000,
+      "autonomous": { "enabled": false },
+    } },
     "spawnagent": { "enabled": false, "max-depth": 3 },
     "filetool": { "enabled": false },
   },

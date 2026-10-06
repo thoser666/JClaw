@@ -56,7 +56,11 @@ class ConfigConformityTest {
                 .containsEntry("jclaw.security.guardrail.enabled", "false")
                 .containsEntry("jclaw.auth.enabled", "false")
                 .containsEntry("jclaw.memory.vault.dir", "./vault")
-                .containsEntry("jclaw.background.enabled", "false");
+                .containsEntry("jclaw.background.enabled", "false")
+                .containsEntry("jclaw.agent.skills.workshop.approvalPolicy", "pending")
+                .containsEntry("jclaw.agent.skills.workshop.maxPending", "50")
+                .containsEntry("jclaw.agent.skills.workshop.maxSkillBytes", "40000")
+                .containsEntry("jclaw.agent.skills.workshop.autonomous.enabled", "false");
     }
 
     @Test

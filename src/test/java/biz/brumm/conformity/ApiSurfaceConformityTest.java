@@ -22,6 +22,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * entfernte oder umbenannte Routen — bricht den Test und zwingt die Doku (bridge-protocol,
  * README) aktuell zu halten. Details ohne Feature-Gate: alle Controller sind im Standard-
  * Kontext verdrahtet (deny-by-default steuert nur die Funktionalität, nicht die Oberfläche).
+ * Stand: 60 deklarierte Endpoints (inkl. Skill-Workshop P4-06).
  */
 @SpringBootTest
 class ApiSurfaceConformityTest {
@@ -95,7 +96,17 @@ class ApiSurfaceConformityTest {
             // PluginRestController
             "GET /api/v1/plugins",
             // SkillRestController
-            "GET /api/v1/skills"
+            "GET /api/v1/skills",
+            // SkillWorkshopRestController (P4-06)
+            "GET /api/v1/skills/workshop",
+            "POST /api/v1/skills/workshop/proposals",
+            "POST /api/v1/skills/workshop/proposals/update",
+            "GET /api/v1/skills/workshop/proposals",
+            "GET /api/v1/skills/workshop/proposals/{proposalId}",
+            "POST /api/v1/skills/workshop/proposals/{proposalId}/revise",
+            "POST /api/v1/skills/workshop/proposals/{proposalId}/apply",
+            "POST /api/v1/skills/workshop/proposals/{proposalId}/reject",
+            "POST /api/v1/skills/workshop/proposals/{proposalId}/quarantine"
     );
 
     /** Nur Framework-Mappings (Error-Handler), kein Teil der deklarierten API. */
