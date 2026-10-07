@@ -14,13 +14,15 @@ import java.util.Optional;
  * <p>
  * Auflösungsreihenfolge: {@code package.json} → {@code main} (nur wenn der aufgelöste
  * Pfad innerhalb des Plugin-Ordners bleibt — Traversal-Schutz), danach die üblichen
- * Fallbacks {@code src/index.js}, {@code src/index.mjs}, {@code index.js},
- * {@code index.mjs}, {@code main.js}.
+ * Fallbacks in JS-vor-TS-Reihenfolge: {@code src/index.js}, {@code src/index.mjs},
+ * {@code index.js}, {@code index.mjs}, {@code main.js}, {@code src/index.ts},
+ * {@code src/index.mts}, {@code index.ts}, {@code index.mts}, {@code main.ts}.
  */
 public final class EntryPointResolver {
 
     public static final List<String> FALLBACK_ENTRIES = List.of(
-            "src/index.js", "src/index.mjs", "index.js", "index.mjs", "main.js");
+            "src/index.js", "src/index.mjs", "index.js", "index.mjs", "main.js",
+            "src/index.ts", "src/index.mts", "index.ts", "index.mts", "main.ts");
 
     private static final String PACKAGE_JSON = "package.json";
 

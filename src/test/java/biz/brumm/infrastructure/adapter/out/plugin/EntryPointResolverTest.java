@@ -81,6 +81,55 @@ class EntryPointResolverTest {
         assertThat(resolver.resolve(plugin)).isEmpty();
     }
 
+    // Spiegel-Test 921 — package.json main darf auf eine .ts-Entry zeigen (P4-01 npm/TypeScript-Bundles).
+    @Test
+    void resolvesMainPointingToTypeScriptEntry() throws IOException {
+        Path plugin = Files.createDirectory(tempDir.resolve("plugin"));
+        write(plugin, "package.json", "{\"name\":\"p\",\"main\":\"src/entry.ts\"}");
+        write(plugin, "src/entry.ts", "module.exports = definePluginEntry({});");
+
+        assertThat(resolver.resolve(plugin))
+                .hasValueSatisfying(path -> assertThat(path.getFileName().toString()).isEqualTo("entry.ts"));
+    }
+
+    // Spiegel-Test 922 — TypeScript-Entry fällt auf src/index.ts zurück, wenn main fehlt.
+    @Test
+    void fallsBackToSrcIndexTs() throws IOException {
+        Path plugin = Files.createDirectory(tempDir.resolve("plugin"));
+        write(plugin, "package.json", "{\"name\":\"p\"}");
+        write(plugin, "src/index.ts", "module.exports = definePluginEntry({});");
+
+        assertThat(resolver.resolve(plugin))
+                .hasValueSatisfying(path -> assertThat(path.getFileName().toString()).isEqualTo("index.ts"));
+    }
+
+    // Spiegel-Test 923 — bei gleichnamigen JS- und TS-Fallbacks gewinnen die JS-Fallbacks (Reihenfolge im Katalog).
+    @Test
+    void prefersJsFallbacksBeforeTsFallbacks() throws IOException {
+        Path plugin = Files.createDirectory(tempDir.resolve("plugin"));
+        write(plugin, "index.js", "module.exports = definePluginEntry({});");
+        write(plugin, "index.ts", "module.exports = definePluginEntry({});");
+
+        assertThat(resolver.resolve(plugin))
+                .hasValueSatisfying(path -> assertThat(path.getFileName().toString()).isEqualTo("index.js"));
+    }
+
+    // Spiegel-Test 924 — die restlichen TypeScript-Fallbacks index.ts und main.ts werden aufgelöst.
+    @Test
+    void resolvesTypeScriptIndexAndMainFallbacks() throws IOException {
+        Path plugin = Files.createDirectory(tempDir.resolve("plugin"));
+        write(plugin, "index.ts", "module.exports = definePluginEntry({});");
+
+        assertThat(resolver.resolve(plugin))
+                .hasValueSatisfying(path -> assertThat(path.getFileName().toString()).isEqualTo("index.ts"));
+
+        Path plugin2 = Files.createDirectory(tempDir.resolve("plugin2"));
+        write(plugin2, "main.ts", "module.exports = definePluginEntry({});");
+
+        assertThat(resolver.resolve(plugin2))
+                .hasValueSatisfying(path -> assertThat(path.getFileName().toString()).isEqualTo("main.ts"));
+    }
+
     private void write(Path root, String relativePath, String content) throws IOException {
         Path file = root.resolve(relativePath);
         Files.createDirectories(file.getParent());

@@ -226,7 +226,7 @@ Die Manifeste werden **ohne Codeausführung** validiert (Control-Plane). Ungült
 
 ### Plugin-Runtime (P4-01)
 
-Mit `jclaw.agent.plugins.runtime.enabled=true` lädt JClaw die gültigen OpenClaw-Plugins zusätzlich in einen Node-Sidecar (`plugin-sidecar.js`). Der Entry-Point eines Bundles wird über `package.json` → `main` (nur innerhalb des Plugin-Ordners, Traversal-Schutz) bzw. die Fallbacks `src/index.js`, `src/index.mjs`, `index.js`, `index.mjs`, `main.js` aufgelöst. Der Entry nutzt die OpenClaw-Entry-Semantik:
+Mit `jclaw.agent.plugins.runtime.enabled=true` lädt JClaw die gültigen OpenClaw-Plugins zusätzlich in einen Node-Sidecar (`plugin-sidecar.js`). Der Entry-Point eines Bundles wird über `package.json` → `main` (nur innerhalb des Plugin-Ordners, Traversal-Schutz) bzw. die Fallbacks `src/index.js`, `src/index.mjs`, `index.js`, `index.mjs`, `main.js`, `src/index.ts`, `src/index.mts`, `index.ts`, `index.mts`, `main.ts` aufgelöst. Das Sidecar lädt und kompiliert das Entry im Bundle-Modus als CommonJS mit hermetischem `require`-Scope (`node_modules` im Plugin-Ordner, Node-Builtins, JSON/Verzeichnis-Index/Subpath; `..`-Aufstieg und absolute Pfade → Fehlercode `-32006`); TypeScript-Entries (`.ts`/`.mts`/`.cts`) werden per Type-Stripping ausgeführt (erasable Syntax, Node ≥ 22.6). Der Entry nutzt die OpenClaw-Entry-Semantik:
 
 ```js
 module.exports = definePluginEntry({
@@ -246,7 +246,7 @@ module.exports = definePluginEntry({
 });
 ```
 
-Tools, Commands und Hooks werden zur Laufzeit registriert (`plugin.load`/`plugin.unload`); `before_tool_call`/`after_tool_call`-Hooks laufen beim Tool-Aufruf (Blocking via Fehlercode `-32005`). Bundles ohne Entry-Point bleiben Control-Plane-only. Voraussetzung: Node.js auf dem Zielsystem. Details und Protokoll: [docs/bridge-protocol.md](docs/bridge-protocol.md) §8.
+Tools, Commands und Hooks werden zur Laufzeit registriert (`plugin.load`/`plugin.unload`); `before_tool_call`/`after_tool_call`-Hooks laufen beim Tool-Aufruf (Blocking via Fehlercode `-32005`). Bundles ohne Entry-Point bleiben Control-Plane-only. Voraussetzung: Node.js auf dem Zielsystem (für TypeScript-Entries ≥ 22.6). Details und Protokoll: [docs/bridge-protocol.md](docs/bridge-protocol.md) §8.
 
 ## Datei-Werkzeuge
 

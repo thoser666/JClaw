@@ -2,11 +2,15 @@ package biz.brumm.infrastructure.sidecar;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIf;
+import org.junit.jupiter.api.io.TempDir;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.node.ObjectNode;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -19,6 +23,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class NodeSidecarBridgeTest {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
+
+    @TempDir
+    Path tempDir;
 
     @Test
     @EnabledIf("nodeAvailable")
@@ -300,12 +307,50 @@ class NodeSidecarBridgeTest {
         }
     }
 
+    // Spiegel-Test 942 — loadPluginBundle (P4-01 npm/TypeScript-Bundles) registriert ein Bundle
+    // direkt über das Plugin-Sidecar (entryPath + baseDir statt Inline-Source).
+    @Test
+    @EnabledIf("nodeAvailable")
+    void loadPluginBundleRegistersBundleFromRealPluginSidecar() throws IOException {
+        Path plugin = Files.createDirectories(tempDir.resolve("bridge-bundle"));
+        write(plugin, "src/index.js", """
+                module.exports = definePluginEntry({
+                  id: 'acme/bridge-bundle',
+                  name: 'Bridge Bundle',
+                  register(api) {
+                    api.registerTool({
+                      name: 'bridge-tool',
+                      description: 'Vom Bundle registriert.',
+                      execute() { return { ok: true }; }
+                    });
+                  }
+                });
+                """);
+
+        try (NodeSidecarBridge bridge = NodeSidecarBridge.start(NodeSidecarBridge.pluginScript(), objectMapper)) {
+            JsonNode receipt = bridge.loadPluginBundle("acme/bridge-bundle",
+                    plugin.resolve("src/index.js"), plugin);
+
+            assertThat(receipt.path("id").asString()).isEqualTo("acme/bridge-bundle");
+            assertThat(receipt.path("name").asString()).isEqualTo("Bridge Bundle");
+            assertThat(receipt.path("tools").get(0).path("name").asString()).isEqualTo("bridge-tool");
+
+            assertThat(bridge.callTool("bridge-tool", null).path("ok").asBoolean()).isTrue();
+        }
+    }
+
     private static JsonNode add(NodeSidecarBridge bridge, int a, int b) throws Exception {
         return bridge.callTool("add", new ObjectMapper().createObjectNode().put("a", a).put("b", b));
     }
 
     private static JsonNode sleep(NodeSidecarBridge bridge, int ms) throws Exception {
         return bridge.callTool("sleep", new ObjectMapper().createObjectNode().put("ms", ms));
+    }
+
+    private void write(Path root, String relativePath, String content) throws IOException {
+        Path file = root.resolve(relativePath);
+        Files.createDirectories(file.getParent());
+        Files.writeString(file, content, StandardCharsets.UTF_8);
     }
 
     private static boolean nodeAvailable() {

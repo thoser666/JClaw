@@ -138,14 +138,14 @@ Endet die stdout-Ausgabe ohne `close()` (Prozess gecrasht), werden alle in-fligh
 
 | Baustein | Zweck |
 |---|---|
-| `NodeSidecarBridge` | Verwaltete Bridge: `start(...)`, `ping()`, `info()`, `listTools()`, `callTool(name, args)`, `loadPlugin(id, source)`, `unloadPlugin(id)`, `deliverChannelMessage(channel, message)`, `restart()`, `close()`; Backpressure (Semaphore): `DEFAULT_MAX_CONCURRENT_REQUESTS`=8, `DEFAULT_BACKPRESSURE_WAIT_MILLIS`=5 s, `ERROR_BUSY` bei Ãœberlast; sammelt stderr (max. 20 Zeilen) pro Prozesslauf und bettet es bei Start-/Crashfehlern in die Fehlermeldung ein; Response-Cap: `DEFAULT_MAX_RESPONSE_LENGTH`=1.000.000, `ERROR_RESPONSE_TOO_LARGE` (-32010) bei Überschreitung |
+| `NodeSidecarBridge` | Verwaltete Bridge: `start(...)`, `ping()`, `info()`, `listTools()`, `callTool(name, args)`, `loadPlugin(id, source)`, `loadPluginBundle(id, entryPath, baseDir)`, `unloadPlugin(id)`, `deliverChannelMessage(channel, message)`, `restart()`, `close()`; Backpressure (Semaphore): `DEFAULT_MAX_CONCURRENT_REQUESTS`=8, `DEFAULT_BACKPRESSURE_WAIT_MILLIS`=5 s, `ERROR_BUSY` bei Ãœberlast; sammelt stderr (max. 20 Zeilen) pro Prozesslauf und bettet es bei Start-/Crashfehlern in die Fehlermeldung ein; Response-Cap: `DEFAULT_MAX_RESPONSE_LENGTH`=1.000.000, `ERROR_RESPONSE_TOO_LARGE` (-32010) bei Überschreitung |
 | `JsonRpcMessage` | Nachrichtenmodell (Request/Response/Error/Notification, strukturierte Fehler) |
 | `JsonRpcLineCodec` | NDJSON-Encoding/-Decoding (reines Framing, unit-getestet) |
 | `SidecarCallException` | Sidecar-Fehler mit JSON-RPC-Fehlercode |
 | `SidecarTimeoutException` | Call-/Ready-Timeout; wahlweise mit stderr-Diagnose (Startfehler: fehlendes Modul, Syntaxfehler) |
 | `SidecarToolDescriptor` | Tool-Registrierung (`name`, `description`, `parameters`) |
 | `NodeSidecarPluginRuntime` | Plugin-Laufzeit (P4-01): `load(Plugin)` â†’ Quittung (Tools/Commands/Channels/Hooks), `unload(id)`, `loadAvailable()`, `tools()`, `callTool(...)`, `deliverChannelMessage(channel, message)`, `close()` |
-| `EntryPointResolver` | Entry-AuflÃ¶sung eines Bundles (`package.json` â†’ `main`, Traversal-Schutz, dann `src/index.js` â€¦ `main.js`) |
+| `EntryPointResolver` | Entry-AuflÃ¶sung eines Bundles (`package.json` â†’ `main`, Traversal-Schutz, dann JS-Fallbacks `src/index.js` … `main.js` und TS-Fallbacks `src/index.ts` … `main.ts`) |
 
 Testabdeckung (P1-03): `JsonRpcLineCodecTest` (Codec/Framing) und `NodeSidecarBridgeTest` (Integration mit echtem Node.js; Ã¼bersprungen, wenn Node nicht verfÃ¼gbar). Abgedeckt: Handshake, ping/info/listTools, Tool-Aufruf (Erfolg + Fehler), Method-NotFound, Call-Timeout, Restart (neue PID), Close, Aufruf nach Close/Restart-nach-Close. Backpressure/Response-Cap: Burst bis zum Limit (`ERROR_BUSY`), Oversize-Antwort abgewiesen (`ERROR_RESPONSE_TOO_LARGE`), Oversize-Notification ohne Request-Id verworfen.
 
@@ -155,9 +155,9 @@ Starten: `NodeSidecarBridge.start(ObjectMapper)` startet das Referenz-Sidecar (`
 
 Das Plugin-Runtime-Sidecar (`sidecar/plugin-sidecar.js`) stellt die OpenClaw-Entry-Semantik bereit: Plugins registrieren ihre **Tools, Commands und Hooks zur Laufzeit** (statt statisch) Ã¼ber `definePluginEntry` (Agent-Plugins) bzw. `defineChannelPluginEntry` (Channel-Plugins).
 
-### Entry-Vertrag (Referenz-Laufzeit)
+### Entry-Vertrag (zwei Lademodi)
 
-Die Plugin-Source ist ein **CommonJS-Entry** ohne npm/TypeScript-AbhÃ¤ngigkeiten; die Kontrakte `definePluginEntry`/`defineChannelPluginEntry` stellt das Sidecar als Globals in einer `vm`-Sandbox bereit:
+Das Sidecar akzeptiert zwei Lademodi (P4-01): **Source-Modus** (`{id, source}`, Legacy) evaluiert die Entry-`source` in einer `vm`-Sandbox ohne `require`/`process`; **Bundle-Modus** (`{id, entryPath, baseDir}`, npm/TypeScript-Bundles) lädt und kompiliert die Entry-Datei aus dem Plugin-Ordner als CommonJS mit hermetischem `require`-Scope (relative Module und `<baseDir>/node_modules` nur innerhalb des Ordners, Node-Builtins erlaubt; `..`-Aufstieg/absolute Pfade → `ERROR_PLUGIN_INVALID`) und TypeScript-Type-Stripping (`.ts`/`.mts`/`.cts`, nur erasable Syntax — kein `export=`/`enum`/`namespace`). Die Kontrakte `definePluginEntry`/`defineChannelPluginEntry` stellt das Sidecar in beiden Modi bereit (Bundle: als Prolog-Global vor dem kompilierten Entry):
 
 ```js
 module.exports = definePluginEntry({
@@ -184,7 +184,7 @@ module.exports = definePluginEntry({
 
 | Methode | Params | Ergebnis |
 |---|---|---|
-| `plugin.load` | `{id, source}` | Quittung `{id, name, tools:[{name, description, parameters}], commands:[String], channels:[{name, description}], hooks:[{event, priority}]}`; ESM-transpilierte Sources (`exports.default`) werden aufgelÃ¶st; `plugin` in vm-Sandbox ohne Zugriff auf `require`/`process` |
+| `plugin.load` | `{id, source}` oder `{id, entryPath, baseDir}` (Bundle-Modus) | Quittung `{id, name, tools:[{name, description, parameters}], commands:[String], channels:[{name, description}], hooks:[{event, priority}]}`; ESM-transpilierte Sources (`exports.default`) werden aufgelÃ¶st; im Bundle-Modus steht der volle Node-Kontext mit hermetischem `require`-Scope bereit, im `vm`-Source-Modus ohne `require`/`process` |
 | `plugin.unload` | `{id}` | `{id, removed}` â€” entfernt Tools/Commands/Channels/Hooks des Plugins (statische Referenz-Tools werden wiederhergestellt) |
 | `channel.deliver` | `{channel, message}` | Stellt eine eingehende Nachricht (`message`) an den `receive`-Handler des registrierten Channels zu (Empfang, P4-01): Ergebnis = Handler-Ergebnis; Fehler: `ERROR_CHANNEL_NOT_FOUND` (-32007, unbekannter Channel), `ERROR_CHANNEL_EXECUTION` (-32008, `receive()` warf) |
 
@@ -192,7 +192,7 @@ module.exports = definePluginEntry({
 
 ### Entry-AuflÃ¶sung (Java)
 
-`EntryPointResolver` lÃ¶st den Entry-Punkt eines Bundles auf: `package.json` â†’ `main` (nur innerhalb des Plugin-Ordners, **Traversal-Schutz**), sonst Fallbacks `src/index.js`, `src/index.mjs`, `index.js`, `index.mjs`, `main.js`. Ohne Entry bleibt das Plugin Control-Plane-only (`load()` liefert `Optional.empty()`).
+`EntryPointResolver` lÃ¶st den Entry-Punkt eines Bundles auf: `package.json` â†’ `main` (nur innerhalb des Plugin-Ordners, **Traversal-Schutz**), sonst Fallbacks `src/index.js`, `src/index.mjs`, `index.js`, `index.mjs`, `main.js`, `src/index.ts`, `src/index.mts`, `index.ts`, `index.mts`, `main.ts`. Ohne Entry bleibt das Plugin Control-Plane-only (`load()` liefert `Optional.empty()`).
 
 ### Laufzeit-Wiring
 

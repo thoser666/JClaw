@@ -224,6 +224,24 @@ public class NodeSidecarBridge implements Closeable {
         return execute(METHOD_PLUGIN_LOAD, params);
     }
 
+    /**
+     * Lädt ein Plugin-Bundle in den Sidecar (P4-01 npm/TypeScript-Bundles): Statt eines
+     * Inline-{@code source} wird {@code entryPath} (absolute Entry-Datei innerhalb des
+     * Plugin-Ordners) zusammen mit {@code baseDir} (hermetischer Require-Ursprung)
+     * übergeben. Der Sidecar liest und kompiliert das Entry selbst — mit gebündeltem
+     * {@code require}-Scope (relative Module / {@code node_modules} nur innerhalb des
+     * Plugin-Ordners, Node-Builtins erlaubt) und TypeScript-Type-Stripping
+     * ({@code .ts}/{@code .mts}/{@code .cts}, erasable Syntax).
+     */
+    public JsonNode loadPluginBundle(String id, Path entryPath, Path baseDir)
+            throws IOException, SidecarCallException, SidecarTimeoutException {
+        ObjectNode params = objectMapper.createObjectNode();
+        params.put("id", id);
+        params.put("entryPath", entryPath.toAbsolutePath().normalize().toString());
+        params.put("baseDir", baseDir.toAbsolutePath().normalize().toString());
+        return execute(METHOD_PLUGIN_LOAD, params);
+    }
+
     /** Entfernt ein geladenes Plugin (und seine registrierten Tools/Commands/Hooks) aus dem Sidecar. */
     public JsonNode unloadPlugin(String id) throws IOException, SidecarCallException, SidecarTimeoutException {
         ObjectNode params = objectMapper.createObjectNode();

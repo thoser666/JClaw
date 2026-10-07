@@ -19,8 +19,6 @@ import tools.jackson.databind.ObjectMapper;
 
 import java.io.Closeable;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -105,9 +103,10 @@ public class NodeSidecarPluginRuntime implements Closeable {
             log.info("Plugin '{}' hat keinen auflösbaren Entry-Point - nur Control-Plane.", plugin.id());
             return Optional.empty();
         }
-        String source = Files.readString(entryFile.get(), StandardCharsets.UTF_8);
         String pluginId = plugin.id() != null ? plugin.id() : plugin.name();
-        JsonNode receiptNode = bridge().loadPlugin(pluginId, source);
+        // Bundle-Modus (P4-01 npm/TypeScript-Bundles): Der Sidecar liest und kompiliert das
+        // Entry selbst — CommonJS mit hermetischem require-Scope + TypeScript-Type-Stripping.
+        JsonNode receiptNode = bridge().loadPluginBundle(pluginId, entryFile.get(), Path.of(plugin.baseDir()));
         PluginLoadReceipt receipt = parseReceipt(receiptNode);
         loadedIds.add(pluginId);
         log.info("Plugin '{}' geladen: {} Tool(s), {} Command(s), {} Channel(s), {} Hook-Registrierung(en).",

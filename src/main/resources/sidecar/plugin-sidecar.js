@@ -5,7 +5,13 @@
 // registrieren Plugins ihre Tools/Commands/Hooks zur Laufzeit über die OpenClaw-Entry-
 // Semantik (definePluginEntry / defineChannelPluginEntry).
 //
-// Entry-Vertrag (CommonJS, ohne npm/TypeScript — reine Referenz-Laufzeit):
+// Entry-Vertrag: zwei Lademodi. (1) Legacy-Source-Modus ({id, source}): der Source
+// wird als CommonJS-Entry in einer vm-Sandbox evaluiert (ohne require). (2) Bundle-
+// Modus ({id, entryPath, baseDir}, P4-01 npm/TypeScript-Bundles): das Entry wird als
+// reale Datei innerhalb des Plugin-Ordners geladen und kompiliert — mit hermetischem
+// require-Scope (relative Module, <baseDir>/node_modules, Node-Builtins; alles, was
+// den Plugin-Ordner verlässt, ist abgewiesen) und TypeScript-Type-Stripping
+// (.ts/.mts/.cts, erasable Syntax, Node >= 22.6). Beispiel (CommonJS):
 //
 //   module.exports = definePluginEntry({
 //     id: 'my-plugin',
@@ -40,6 +46,9 @@
 
 const readline = require('readline');
 const vm = require('vm');
+const fs = require('fs');
+const path = require('path');
+const Module = require('module');
 
 const ERROR_METHOD_NOT_FOUND = -32601;
 const ERROR_TOOL_NOT_FOUND = -32001;
@@ -273,11 +282,240 @@ function evaluateEntry(id, source) {
   return entry || null;
 }
 
+// ---- Bundle-Modus (npm/TypeScript, P4-01) ------------------------------------------
+//
+// Echte Plugin-Bundles werden als reale Datei (entryPath innerhalb von baseDir) geladen
+// und als CommonJS kompiliert — mit gebündeltem, hermetischem `require`-Scope: relative
+// Module, <baseDir>/node_modules (für npm-Abhängigkeiten) und Node-Builtins sind erlaubt;
+// jede Auflösung, die den Plugin-Ordner verlässt (absolute Pfade, `..`-Aufstieg),
+// scheitert mit ERROR_PLUGIN_INVALID. TypeScript-Entries (.ts/.mts/.cts) laufen über das
+// native Type-Stripping des Node-CJS-Loaders (Node >= 22.6; nur erasable Syntax — kein
+// export=, enum oder namespace). Der Modul-Cache ist pro plugin.load frisch, sodass ein
+// Hot-Reload (erneutes plugin.load mit derselben id) die Registrierungen neu aufbaut.
+
+const MODULE_EXTENSIONS = ['.js', '.cjs', '.mjs', '.ts', '.mts', '.cts', '.json'];
+const TYPE_SCRIPT_EXTENSIONS = ['.ts', '.mts', '.cts'];
+const PROLOGUE = 'const definePluginEntry=(entry)=>entry;const defineChannelPluginEntry=(entry)=>entry;';
+
+function isTypeScriptFile(file) {
+  return TYPE_SCRIPT_EXTENSIONS.some((ext) => file.endsWith(ext));
+}
+
+function isBuiltin(request) {
+  return typeof Module.isBuiltin === 'function'
+      ? Module.isBuiltin(request)
+      : Module.builtinModules.includes(request);
+}
+
+function isInside(baseDir, target) {
+  const base = path.resolve(baseDir);
+  const resolved = path.resolve(target);
+  return resolved === base || resolved.startsWith(base + path.sep);
+}
+
+function assertInside(baseDir, target, pluginId) {
+  if (!isInside(baseDir, target)) {
+    throw new Error(
+        "Plugin '" + pluginId + "': '" + target + "' verlässt den Plugin-Ordner (hermetische Grenze).");
+  }
+  return path.resolve(target);
+}
+
+function statIs(target, kind) {
+  try {
+    const stat = fs.statSync(target);
+    return kind === 'file' ? stat.isFile() : stat.isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+function resolveAsFile(baseDir, target, pluginId) {
+  assertInside(baseDir, target, pluginId);
+  if (statIs(target, 'file')) {
+    return path.resolve(target);
+  }
+  for (const ext of MODULE_EXTENSIONS) {
+    const candidate = target + ext;
+    if (statIs(candidate, 'file')) {
+      return path.resolve(candidate);
+    }
+  }
+  return null;
+}
+
+function resolveIndexFile(baseDir, target, pluginId) {
+  for (const ext of MODULE_EXTENSIONS) {
+    const candidate = path.join(target, 'index' + ext);
+    if (statIs(candidate, 'file')) {
+      assertInside(baseDir, candidate, pluginId);
+      return path.resolve(candidate);
+    }
+  }
+  return null;
+}
+
+function resolveAsDirectory(baseDir, target, pluginId) {
+  if (!statIs(target, 'dir')) {
+    return null;
+  }
+  const packageJson = path.join(target, 'package.json');
+  if (statIs(packageJson, 'file')) {
+    try {
+      const main = JSON.parse(fs.readFileSync(packageJson, 'utf8')).main;
+      if (typeof main === 'string' && main.length > 0) {
+        const mainTarget = path.resolve(target, main);
+        const resolved = resolveAsFile(baseDir, mainTarget, pluginId)
+            || resolveAsDirectory(baseDir, mainTarget, pluginId);
+        if (resolved) {
+          return resolved;
+        }
+      }
+    } catch (ignored) {
+      // Ungültiges package.json: wie ein Verzeichnis ohne main behandeln
+    }
+  }
+  return resolveIndexFile(baseDir, target, pluginId);
+}
+
+function stripTypeScript(filename, source) {
+  if (typeof Module.stripTypeScriptTypes !== 'function') {
+    throw new Error("Plugin '" + filename + "': TypeScript-Support benötigt Node >= 22.6 (Type Stripping; "
+        + 'aktuell: ' + process.version + ').');
+  }
+  try {
+    return Module.stripTypeScriptTypes(source);
+  } catch (err) {
+    throw new Error("Plugin '" + filename + "': TypeScript nur mit erasable Syntax (kein export=, enum, "
+        + 'namespace): ' + (err.message || String(err)));
+  }
+}
+
+/**
+ * Erzeugt den hermetischen Modul-Loader eines Plugin-Bundles.
+ * Liefert { evaluateModule(file), resolveRequest(request) }; der Modul-Cache ist pro
+ * Load frisch (Hot-Reload: jedes plugin.load wertet das Entry neu aus).
+ */
+function createModuleLoader(pluginId, baseDir) {
+  const base = path.resolve(baseDir);
+  const cache = new Map();
+
+  function resolveRequest(request, fromFile) {
+    if (isBuiltin(request)) {
+      return request;
+    }
+    const fromDir = fromFile ? path.dirname(path.resolve(fromFile)) : base;
+    if (request.startsWith('.') || path.isAbsolute(request)) {
+      const target = path.isAbsolute(request) ? path.resolve(request) : path.resolve(fromDir, request);
+      assertInside(base, target, pluginId);
+      const resolved = resolveAsFile(base, target, pluginId) || resolveAsDirectory(base, target, pluginId);
+      if (resolved) {
+        return resolved;
+      }
+      throw new Error("Plugin '" + pluginId + "': Modul '" + request + "' wurde nicht gefunden "
+          + '(nur innerhalb des Plugin-Ordners erlaubt).');
+    }
+    // npm-Specifier: nur node_modules-Verzeichnisse innerhalb des Plugin-Ordners erreichen
+    let dir = fromDir;
+    while (true) {
+      const candidate = path.join(dir, 'node_modules', request);
+      if (isInside(base, candidate)) {
+        const resolved = resolveAsFile(base, candidate, pluginId)
+            || resolveAsDirectory(base, candidate, pluginId);
+        if (resolved) {
+          return resolved;
+        }
+      }
+      if (dir === base) {
+        break;
+      }
+      const parent = path.dirname(dir);
+      if (parent === dir || !isInside(base, parent)) {
+        break;
+      }
+      dir = parent;
+    }
+    throw new Error("Plugin '" + pluginId + "': Modul '" + request + "' wurde nicht in node_modules "
+        + 'des Plugin-Ordners gefunden.');
+  }
+
+  function compileModule(filename, source) {
+    const m = new Module(filename, module);
+    m.filename = filename;
+    m.paths = Module._nodeModulePaths(base);
+    m.require = scopedRequire;
+    let code = source;
+    if (isTypeScriptFile(filename)) {
+      code = stripTypeScript(filename, source);
+    }
+    m._compile(PROLOGUE + '\n' + code, filename);
+    return m;
+  }
+
+  function evaluateModule(filename) {
+    const resolved = assertInside(base, filename, pluginId);
+    if (cache.has(resolved)) {
+      return cache.get(resolved);
+    }
+    let m;
+    if (resolved.endsWith('.json')) {
+      m = new Module(resolved, module);
+      m.filename = resolved;
+      m.paths = Module._nodeModulePaths(base);
+      m.require = scopedRequire;
+      m.exports = JSON.parse(fs.readFileSync(resolved, 'utf8'));
+    } else {
+      m = compileModule(resolved, fs.readFileSync(resolved, 'utf8'));
+    }
+    cache.set(resolved, m);
+    return m;
+  }
+
+  function scopedRequire(request) {
+    const fromFile = this && this.filename ? this.filename : base;
+    const resolved = resolveRequest(request, fromFile);
+    if (resolved === request) {
+      // Node-Builtin (z. B. 'fs', 'path'): über den ursprünglichen Module.require laden
+      return Module.prototype.require.call(this && this instanceof Module ? this : module, resolved);
+    }
+    const exports = evaluateModule(resolved).exports;
+    return exports && typeof exports === 'object' && exports.__esModule && exports.default !== undefined
+        ? exports.default
+        : exports;
+  }
+  scopedRequire.resolve = (request) => {
+    const resolved = resolveRequest(request, base);
+    return resolved === request ? resolved : assertInside(base, resolved, pluginId);
+  };
+  scopedRequire.resolve.paths = () => [path.join(base, 'node_modules')];
+
+  return { evaluateModule, resolveRequest };
+}
+
+function evaluateBundle(id, entryPath, baseDir) {
+  const loader = createModuleLoader(id, baseDir);
+  const entryModule = loader.evaluateModule(entryPath);
+  let entry = entryModule.exports;
+  if (entry && typeof entry === 'object' && entry.default) {
+    entry = entry.default; // z. B. aus transpiliertem ESM: exports.default = definePluginEntry(...)
+  }
+  return entry || null;
+}
+
 function loadPlugin(req) {
   const id = req.params && req.params.id;
   const source = req.params && req.params.source;
-  if (typeof id !== 'string' || id.length === 0 || typeof source !== 'string' || source.length === 0) {
-    sendError(req.id, ERROR_PLUGIN_INVALID, 'plugin.load benötigt id (String) und source (String).');
+  const entryPath = req.params && req.params.entryPath;
+  const baseDir = req.params && req.params.baseDir;
+  const bundleMode = typeof entryPath === 'string' && entryPath.length > 0
+      && typeof baseDir === 'string' && baseDir.length > 0;
+  if (typeof id !== 'string' || id.length === 0) {
+    sendError(req.id, ERROR_PLUGIN_INVALID, 'plugin.load benötigt id (String).');
+    return;
+  }
+  if (!bundleMode && (typeof source !== 'string' || source.length === 0)) {
+    sendError(req.id, ERROR_PLUGIN_INVALID,
+        'plugin.load benötigt source (String) oder entryPath+baseDir (Bundle-Modus).');
     return;
   }
 
@@ -287,7 +525,7 @@ function loadPlugin(req) {
 
   let entry;
   try {
-    entry = evaluateEntry(id, source);
+    entry = bundleMode ? evaluateBundle(id, entryPath, baseDir) : evaluateEntry(id, source);
   } catch (err) {
     sendError(req.id, ERROR_PLUGIN_INVALID, "Plugin-Source '" + id + "' ist ungültig: " + (err.message || String(err)));
     return;
