@@ -4,6 +4,7 @@ import biz.brumm.config.GuardrailProperties;
 import biz.brumm.config.SessionProperties;
 import biz.brumm.domain.model.Session;
 import biz.brumm.domain.port.out.ConversationStore;
+import biz.brumm.domain.port.out.PluginHookDispatcher;
 import biz.brumm.domain.port.out.SessionStore;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -32,10 +33,12 @@ class SessionServiceTest {
 
     private SessionService service;
 
+    private final PluginHookDispatcher pluginHooks = PluginHookDispatcher.noop();
+
     @BeforeEach
     void setUp() {
         service = new SessionService(sessionStore, conversationStore,
-                new SessionProperties("none", 4, 60), guardDisabled());
+                new SessionProperties("none", 4, 60), guardDisabled(), pluginHooks);
     }
 
     private static CredentialLeakGuard guardDisabled() {
@@ -128,7 +131,7 @@ class SessionServiceTest {
     @Test
     void shouldResetReturnsFalseForDailyWhenSameDay() {
         SessionService dailyService = new SessionService(sessionStore, conversationStore,
-                new SessionProperties("daily", 4, 60), guardDisabled());
+                new SessionProperties("daily", 4, 60), guardDisabled(), pluginHooks);
         Session session = new Session("s1", null, Instant.now(), Instant.now(), Instant.now());
 
         assertThat(dailyService.shouldReset(session)).isFalse();
@@ -137,7 +140,7 @@ class SessionServiceTest {
     @Test
     void shouldResetReturnsTrueForDailyWhenOlderThanBoundary() {
         SessionService dailyService = new SessionService(sessionStore, conversationStore,
-                new SessionProperties("daily", 0, 60), guardDisabled());
+                new SessionProperties("daily", 0, 60), guardDisabled(), pluginHooks);
         Instant twoDaysAgo = Instant.now().minus(2, ChronoUnit.DAYS);
         Session session = new Session("s1", null, twoDaysAgo, twoDaysAgo, twoDaysAgo);
 
@@ -147,7 +150,7 @@ class SessionServiceTest {
     @Test
     void shouldResetReturnsTrueForIdleWhenExpired() {
         SessionService idleService = new SessionService(sessionStore, conversationStore,
-                new SessionProperties("idle", 4, 1), guardDisabled());
+                new SessionProperties("idle", 4, 1), guardDisabled(), pluginHooks);
         Instant twoMinutesAgo = Instant.now().minus(2, ChronoUnit.MINUTES);
         Session session = new Session("s1", null, Instant.now(), twoMinutesAgo, twoMinutesAgo);
 
@@ -157,7 +160,7 @@ class SessionServiceTest {
     @Test
     void shouldResetReturnsFalseForIdleWhenNotExpired() {
         SessionService idleService = new SessionService(sessionStore, conversationStore,
-                new SessionProperties("idle", 4, 60), guardDisabled());
+                new SessionProperties("idle", 4, 60), guardDisabled(), pluginHooks);
         Session session = new Session("s1", null, Instant.now(), Instant.now(), Instant.now());
 
         assertThat(idleService.shouldReset(session)).isFalse();
@@ -180,7 +183,7 @@ class SessionServiceTest {
     @Test
     void touchSessionRedactsKnownSecretFromDisplayName() {
         SessionService guarded = new SessionService(sessionStore, conversationStore,
-                new SessionProperties("none", 4, 60), guardWithSecrets(List.of("TOPSECRET")));
+                new SessionProperties("none", 4, 60), guardWithSecrets(List.of("TOPSECRET")), pluginHooks);
         Session existing = new Session("s1", null, Instant.now(), Instant.now(), Instant.now());
         when(sessionStore.findById("s1")).thenReturn(Optional.of(existing));
         when(sessionStore.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
@@ -193,7 +196,7 @@ class SessionServiceTest {
     @Test
     void listSessionsRedactsKnownSecretFromExistingDisplayName() {
         SessionService guarded = new SessionService(sessionStore, conversationStore,
-                new SessionProperties("none", 4, 60), guardWithSecrets(List.of("TOPSECRET")));
+                new SessionProperties("none", 4, 60), guardWithSecrets(List.of("TOPSECRET")), pluginHooks);
         Session existing = new Session("s1", "TOPSECRET ist geheim", Instant.now(), Instant.now(), Instant.now());
         when(sessionStore.findAll()).thenReturn(List.of(existing));
 

@@ -7,6 +7,7 @@ import biz.brumm.domain.model.SkillProposal;
 import biz.brumm.domain.model.SkillProposalStatus;
 import biz.brumm.domain.model.SkillProposalType;
 import biz.brumm.domain.model.SkillWorkshopConfig;
+import biz.brumm.domain.port.out.PluginHookDispatcher;
 import biz.brumm.domain.port.out.SkillProposalStore;
 import biz.brumm.domain.port.out.SkillWorkshopWriter;
 import org.springframework.stereotype.Service;
@@ -15,6 +16,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 import static biz.brumm.domain.service.SkillWorkshopException.Kind.APPROVAL_REQUIRED;
 import static biz.brumm.domain.service.SkillWorkshopException.Kind.CONFLICT;
@@ -30,6 +32,10 @@ import static biz.brumm.domain.service.SkillWorkshopException.Kind.NOT_FOUND;
  * vor dem {@code apply} ändert. {@code maxPending} deckelt PENDING + QUARANTINED;
  * {@code approvalPolicy: "pending"} verlangt bei agent-initiierten Lifecycle-Aktionen
  * Operator-Freigabe (REST-Aufruf = die Freigabe).
+ * <p>
+ * Plugin-Hooks (P4-01 Folgearbeit „Voll-Hook-Katalog"): {@code skill_proposal_evaluate} ist
+ * blockbar in proposeCreate/proposeUpdate (Block → CONFLICT), {@code skill_changed} beobachtet
+ * nach dem Schreiben eines angewendeten Skills.
  */
 @Service
 public class SkillWorkshopService {
@@ -39,12 +45,14 @@ public class SkillWorkshopService {
     private final SkillProposalStore store;
     private final SkillWorkshopWriter writer;
     private final SkillWorkshopProperties properties;
+    private final PluginHookDispatcher pluginHooks;
 
     public SkillWorkshopService(SkillProposalStore store, SkillWorkshopWriter writer,
-                                SkillWorkshopProperties properties) {
+                                SkillWorkshopProperties properties, PluginHookDispatcher pluginHooks) {
         this.store = store;
         this.writer = writer;
         this.properties = properties;
+        this.pluginHooks = pluginHooks;
     }
 
     public SkillWorkshopConfig config() {
@@ -54,6 +62,7 @@ public class SkillWorkshopService {
 
     public SkillProposal proposeCreate(String name, String description, String content) {
         validate(name, description, content);
+        requireEvaluated(name, description, content, "create");
         if (writer.exists(name)) {
             throw new SkillWorkshopException("Skill '" + name + "' existiert bereits (No-Clobber).", CONFLICT);
         }
@@ -64,6 +73,7 @@ public class SkillWorkshopService {
 
     public SkillProposal proposeUpdate(String name, String description, String content) {
         validate(name, description, content);
+        requireEvaluated(name, description, content, "update");
         String targetHash = writer.contentHash(name);
         if (targetHash.isEmpty()) {
             throw new SkillWorkshopException("Skill '" + name + "' existiert nicht im Workspace.", NOT_FOUND);
@@ -100,8 +110,13 @@ public class SkillWorkshopService {
                     + "' — das Ziel hat sich seit der Anlage geändert.", CONFLICT);
         }
         writer.write(new Skill(proposal.name(), proposal.description(), proposal.content(), null));
-        return store.save(updated(proposal, proposal.description(), proposal.content(),
+        SkillProposal applied = store.save(updated(proposal, proposal.description(), proposal.content(),
                 SkillProposalStatus.APPLIED, proposal.targetHash(), null));
+        // skill_changed (OpenClaw): beobachtet nach dem Schreiben eines Skills.
+        pluginHooks.dispatch("skill_changed",
+                Map.of("skill", proposal.name(), "action", "apply", "status", "applied",
+                        "proposalId", proposal.proposalId(), "appliedAt", applied.updatedAt().toString()));
+        return applied;
     }
 
     public SkillProposal reject(String proposalId, String reason, boolean agentInitiated) {
@@ -176,6 +191,17 @@ public class SkillWorkshopService {
         if (active >= properties.maxPending()) {
             throw new SkillWorkshopException("Workshop-Vorschlagslimit maxPending (" + properties.maxPending()
                     + ") erreicht.", CONFLICT);
+        }
+    }
+
+    /** skill_proposal_evaluate (OpenClaw): blockbarer Hook vor der Proposalerzeugung. */
+    private void requireEvaluated(String name, String description, String content, String kind) {
+        PluginHookDispatcher.HookOutcome evaluation = pluginHooks.dispatch("skill_proposal_evaluate",
+                Map.of("skill", name, "description", description, "content", content, "kind", kind));
+        if (evaluation.blocked()) {
+            throw new SkillWorkshopException(
+                    "Skill-Vorschlag '" + name + "' durch skill_proposal_evaluate-Hook blockiert: "
+                            + evaluation.message(), CONFLICT);
         }
     }
 

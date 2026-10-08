@@ -51,6 +51,7 @@ const path = require('path');
 const Module = require('module');
 
 const ERROR_METHOD_NOT_FOUND = -32601;
+const ERROR_INVALID_PARAMS = -32602;
 const ERROR_TOOL_NOT_FOUND = -32001;
 const ERROR_TOOL_EXECUTION = -32002;
 const ERROR_INTERNAL = -32003;
@@ -129,14 +130,21 @@ for (const name of Object.keys(staticTools)) {
   tools.set(name, { pluginId: null, name, ...staticTools[name] });
 }
 
+// Voll-Hook-Katalog (P4-01 Folgearbeit): alle modernen OpenClaw-Hook-Stages (2026.8.x,
+// ohne die Legacy-Stage 'before_agent_start'). JClaw emittiert davon auf der Java-Seite
+// einen Teil der Stages (Verdrahtung siehe docs/parity-roadmap.md); der Katalog ist die
+// Registrierungs-API, nicht das Versprechen, dass jede Runtime jeden Hook emittiert.
 const HOOK_EVENTS = [
-  'before_model_resolve', 'before_prompt_build', 'before_agent_run',
-  'before_agent_reply', 'before_agent_finalize', 'agent_end',
+  'before_model_resolve', 'agent_turn_prepare', 'before_prompt_build',
+  'before_agent_run', 'before_agent_reply', 'before_agent_finalize', 'agent_end',
+  'llm_input', 'llm_output', 'model_call_started', 'model_call_ended',
   'before_tool_call', 'after_tool_call', 'tool_result_persist',
   'message_received', 'message_sending', 'message_sent', 'reply_payload_sending',
+  'before_message_write', 'before_dispatch', 'reply_dispatch',
   'session_start', 'session_end',
+  'before_compaction', 'after_compaction', 'before_reset',
   'gateway_start', 'gateway_stop', 'cron_reconciled', 'cron_changed',
-  'before_install',
+  'before_install', 'resolve_exec_env',
   'skill_proposal_evaluate', 'skill_changed'
 ];
 
@@ -256,7 +264,12 @@ function createPluginApi(id) {
       }
       const priority = options && typeof options.priority === 'number' ? options.priority : 0;
       const matcher = options ? options.matcher : undefined;
-      const hook = { pluginId: id, event, handler, matcher, priority };
+      // Per-Hook-Timeout (OpenClaw plugins.entries.<id>.hooks.timeoutMs): wird callHook
+      // mit einem Timeout ausgestattet, bricht er den Hook ab und behandelt das als Block.
+      const timeoutMs = options && typeof options.timeoutMs === 'number' && options.timeoutMs > 0
+          ? options.timeoutMs
+          : undefined;
+      const hook = { pluginId: id, event, handler, matcher, priority, timeoutMs };
       hooks.push(hook);
       plugins.get(id).hooks.push(hook);
     }
@@ -561,7 +574,11 @@ function loadPlugin(req) {
     name: plugin.name,
     tools: registeredTools,
     commands: plugin.commands.slice(),
-    hooks: plugin.hooks.map((hook) => ({ event: hook.event, priority: hook.priority })),
+    hooks: plugin.hooks.map((hook) => ({
+      event: hook.event,
+      priority: hook.priority,
+      ...(hook.timeoutMs !== undefined ? { timeoutMs: hook.timeoutMs } : {})
+    })),
     channels: registeredChannels
   });
 }
@@ -633,6 +650,77 @@ function deliverChannel(req) {
   sendResult(req.id, result !== undefined ? result : { delivered: true });
 }
 
+/**
+ * Führt einen Hook-Handler aus — mit optionalem Per-Hook-Timeout. Ein Timeout
+ * (abgelaufener Timer) wird als Werfen behandelt und damit als Block gewertet.
+ */
+async function runHook(hook, ctx) {
+  const invoke = () => hook.handler(ctx);
+  const timeoutMs = hook.timeoutMs;
+  if (typeof timeoutMs !== 'number' || timeoutMs <= 0) {
+    return invoke();
+  }
+  let timer;
+  try {
+    return await Promise.race([
+      Promise.resolve().then(invoke),
+      new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error('Timeout nach ' + timeoutMs + ' ms.')), timeoutMs);
+      })
+    ]);
+  } finally {
+    if (timer) {
+      clearTimeout(timer);
+    }
+  }
+}
+
+/**
+ * Generischer Hook-Dispatch (P4-01 Folgearbeit „Voll-Hook-Katalog").
+ *
+ * Löst alle für {@code event} (+ optionalen {@code matcher}-Namen) registrierten Hooks
+ * in Prioritäts-Reihenfolge aus. Blocking: Ein Hook wirft ODER liefert
+ * {@code {block: true}} / {@code {blocked: true}} — dann stoppt der Dispatch und das
+ * Ergebnis trägt {@code blocked: true} plus Nachricht. Unbekannte Stages liefern
+ * {@code count: 0, blocked: false} (Katalog = Registrierungs-API, keine Fehlerstufe).
+ */
+async function callHook(req) {
+  const event = req.params && req.params.event;
+  if (typeof event !== 'string' || event.length === 0) {
+    sendError(req.id, ERROR_INVALID_PARAMS, 'plugin.callHook benötigt event (String).');
+    return;
+  }
+  const name = (req.params && typeof req.params.name === 'string' && req.params.name.length > 0)
+      ? req.params.name
+      : undefined;
+  const ctx = (req.params && req.params.ctx && typeof req.params.ctx === 'object') ? req.params.ctx : {};
+
+  let count = 0;
+  for (const hook of matchingHooks(event, name)) {
+    count++;
+    let outcome;
+    try {
+      outcome = await runHook(hook, ctx);
+    } catch (err) {
+      sendResult(req.id, {
+        event, count, blocked: true,
+        message: event + '-Hook hat blockiert: ' + (err.message || String(err))
+      });
+      return;
+    }
+    if (outcome && typeof outcome === 'object' && (outcome.block === true || outcome.blocked === true)) {
+      sendResult(req.id, {
+        event, count, blocked: true,
+        message: (typeof outcome.message === 'string' && outcome.message.length > 0)
+            ? outcome.message
+            : event + '-Hook hat blockiert.'
+      });
+      return;
+    }
+  }
+  sendResult(req.id, { event, count, blocked: false });
+}
+
 function handleRequest(req) {
   switch (req.method) {
     case 'sidecar.ping':
@@ -658,6 +746,9 @@ function handleRequest(req) {
       return;
     case 'plugin.unload':
       unloadPlugin(req);
+      return;
+    case 'plugin.callHook':
+      callHook(req);
       return;
     case 'channel.deliver':
       deliverChannel(req);

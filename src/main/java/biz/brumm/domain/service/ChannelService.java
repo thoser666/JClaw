@@ -3,6 +3,7 @@ package biz.brumm.domain.service;
 import biz.brumm.domain.model.*;
 import biz.brumm.domain.port.out.ChannelAdapter;
 import biz.brumm.domain.port.out.ChannelStore;
+import biz.brumm.domain.port.out.PluginHookDispatcher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -17,12 +18,14 @@ public class ChannelService {
 
     private final ChannelStore channelStore;
     private final CredentialLeakGuard credentialLeakGuard;
+    private final PluginHookDispatcher pluginHooks;
     private final Map<ChannelType, ChannelAdapter> adapters = new EnumMap<>(ChannelType.class);
 
     public ChannelService(ChannelStore channelStore, List<ChannelAdapter> adapterList,
-                          CredentialLeakGuard credentialLeakGuard) {
+                          CredentialLeakGuard credentialLeakGuard, PluginHookDispatcher pluginHooks) {
         this.channelStore = channelStore;
         this.credentialLeakGuard = credentialLeakGuard;
+        this.pluginHooks = pluginHooks;
         for (ChannelAdapter adapter : adapterList) {
             adapters.put(adapter.channelType(), adapter);
             registriert(adapter.channelType());
@@ -78,17 +81,45 @@ public class ChannelService {
         }
 
         String sanitized = credentialLeakGuard.redact(content);
+
+        // message_sending (OpenClaw): blockbarer Hook vor dem eigentlichen Versand
+        PluginHookDispatcher.HookOutcome sendDecision = pluginHooks.dispatch("message_sending",
+                Map.of("channelId", channel.id(), "sessionId", sessionId == null ? "" : sessionId,
+                        "threadId", threadId == null ? "" : threadId, "content", sanitized));
+        if (sendDecision.blocked()) {
+            log.warn("Nachricht an '{}' blockiert durch message_sending-Hook: {}", channel.name(), sendDecision.message());
+            throw new ChannelAdapter.ChannelException(
+                    "Versand blockiert durch message_sending-Hook: " + sendDecision.message());
+        }
+
         ChannelMessage outbound = ChannelMessage.outbound(channel.id(), sanitized, threadId, sessionId);
         ChannelMessage sent = adapter.send(channel, outbound);
         channelStore.saveMessage(sent);
         log.info("Nachricht an '{}' gesendet: {}", channel.name(),
                 sanitized.length() > 50 ? sanitized.substring(0, 50) + "..." : sanitized);
+
+        // message_sent (OpenClaw): beobachtet nach erfolgreichem Versand
+        pluginHooks.dispatch("message_sent",
+                Map.of("channelId", channel.id(), "sessionId", sessionId == null ? "" : sessionId,
+                        "threadId", threadId == null ? "" : threadId, "content", sanitized,
+                        "messageId", sent.id()));
         return sent;
     }
 
     // --- Eingehende Nachricht verarbeiten ---
 
     public void handleInbound(ChannelMessage message) {
+        // message_received (OpenClaw): blockbarer Hook — blockiert, wird die Nachricht
+        // verworfen (nicht gespeichert, nicht weiterverarbeitet).
+        PluginHookDispatcher.HookOutcome received = pluginHooks.dispatch("message_received",
+                Map.of("channelId", message.channelId(), "sessionId", message.sessionId() == null ? "" : message.sessionId(),
+                        "threadId", message.threadId() == null ? "" : message.threadId(), "content", message.content(),
+                        "direction", "inbound"));
+        if (received.blocked()) {
+            log.warn("Eingehende Nachricht auf '{}' verworfen (message_received-Hook blockiert): {}",
+                    message.channelId(), received.message());
+            return;
+        }
         channelStore.saveMessage(message);
         String preview = credentialLeakGuard.redact(message.content());
         log.info("Eingehende Nachricht auf '{}': {}", message.channelId(),

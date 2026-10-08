@@ -3,16 +3,19 @@ package biz.brumm.infrastructure.adapter.out.plugin;
 import biz.brumm.config.PluginRuntimeProperties;
 import biz.brumm.domain.model.Plugin;
 import biz.brumm.domain.model.PluginType;
+import biz.brumm.domain.port.out.PluginHookDispatcher;
 import biz.brumm.domain.port.out.PluginProvider;
 import biz.brumm.infrastructure.sidecar.NodeSidecarBridge;
 import biz.brumm.infrastructure.sidecar.SidecarCallException;
 import biz.brumm.infrastructure.sidecar.SidecarTimeoutException;
 import biz.brumm.infrastructure.sidecar.SidecarToolDescriptor;
-import org.springframework.ai.tool.ToolCallback;
 import org.slf4j.Logger;
-import org.springframework.ai.tool.ToolCallback;
 import org.slf4j.LoggerFactory;
+import org.springframework.ai.tool.ToolCallback;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.ContextClosedEvent;
+import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
@@ -20,8 +23,10 @@ import tools.jackson.databind.ObjectMapper;
 import java.io.Closeable;
 import java.io.IOException;
 import java.nio.file.Path;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -46,10 +51,15 @@ import java.util.concurrent.ConcurrentHashMap;
  * oder eine explizite Freigabe ({@code trusted-sources}/{@code allow} = OpenClaw {@code --force})
  * verfügt. Blockierte Plugins (fehlende/ungültige Provenance) bleiben Control-Plane-only und werden
  * nie in den Sidecar geladen.
+ * <p>
+ * Hook-Dispatch (P4-01 Folgearbeit „Voll-Hook-Katalog"): Die Laufzeit implementiert den
+ * {@link PluginHookDispatcher}-Port und reicht jeden Dispatch als {@code plugin.callHook} an den
+ * Sidecar weiter. Fast-Path: Sind keine Plugins geladen und läuft kein Sidecar, wird auf einen
+ * Sidecar-Start verzichtet (ausgenommen {@code before_install}, das vor dem ersten Load läuft).
  */
 @Component
 @ConditionalOnProperty(prefix = "jclaw.agent.plugins.runtime", name = "enabled", havingValue = "true")
-public class NodeSidecarPluginRuntime implements Closeable {
+public class NodeSidecarPluginRuntime implements Closeable, PluginHookDispatcher {
 
     private static final Logger log = LoggerFactory.getLogger(NodeSidecarPluginRuntime.class);
 
@@ -96,6 +106,20 @@ public class NodeSidecarPluginRuntime implements Closeable {
         if (provenanceBlock.isPresent()) {
             log.warn("Plugin '{}' wird NICHT in den Sidecar geladen (Install-Provenance): {} (Control-Plane-only).",
                     plugin.id(), provenanceBlock.get().message());
+            return Optional.empty();
+        }
+        // before_install-Hook (OpenClaw): Plugins können eine Installation vor dem Laden
+        // inspizieren und blockieren. Läuft vor dem ersten Bridge-Start, deshalb kein
+        // Fast-Path (dispatch() nimmt 'before_install' explizit davon aus).
+        Map<String, Object> installCtx = Map.<String, Object>of(
+                "pluginId", plugin.id() != null ? plugin.id() : plugin.name(),
+                "name", plugin.name(),
+                "baseDir", plugin.baseDir(),
+                "type", plugin.type().name().toLowerCase());
+        HookOutcome installDecision = dispatch("before_install", installCtx);
+        if (installDecision.blocked()) {
+            log.warn("Plugin '{}' wird NICHT in den Sidecar geladen (before_install-Hook blockiert): {}",
+                    plugin.id(), installDecision.message());
             return Optional.empty();
         }
         Optional<Path> entryFile = entryPointResolver.resolve(Path.of(plugin.baseDir()));
@@ -185,6 +209,43 @@ public class NodeSidecarPluginRuntime implements Closeable {
         } catch (IOException e) {
             throw new IllegalStateException("Plugin-Tool '" + name + "' fehlgeschlagen: " + e.getMessage(), e);
         }
+    }
+
+    @Override
+    public HookOutcome dispatch(String event, String name, Map<String, Object> ctx) {
+        // Fast-Path: ohne geladene Plugins und ohne laufenden Sidecar keinen Prozess
+        // hochziehen (die meisten JClaw-Stages emittieren ohnehin nur, wenn Plugins da
+        // sind). before_install läuft vor dem ersten Load und ist davon ausgenommen.
+        if (loadedIds.isEmpty() && bridge == null && !"before_install".equals(event)) {
+            return HookOutcome.proceed();
+        }
+        try {
+            JsonNode ctxNode = objectMapper.readTree(objectMapper.writeValueAsString(ctx));
+            JsonNode result = bridge().callHook(event, name, ctxNode);
+            if (result.path("blocked").asBoolean(false)) {
+                return HookOutcome.block(result.path("message").asString(event + "-Hook hat blockiert."));
+            }
+            return HookOutcome.proceed();
+        } catch (IOException e) {
+            // Hooks sind additive Lifecycle-Beobachtung: Sidecar-Fehler dürfen den
+            // Kern-Ablauf nicht kippen (fail-open; Blocking kommt nur von Hooks selbst).
+            log.warn("plugin.callHook '{}' fehlgeschlagen ({}, {}); Dispatcher fährt fort.",
+                    event, e.getClass().getSimpleName(), e.getMessage());
+            return HookOutcome.proceed();
+        }
+    }
+
+    /** Gateway-Lifecycle (OpenClaw {@code gateway_start}/{@code gateway_stop}): beobachtet. */
+    @EventListener(ApplicationReadyEvent.class)
+    public void onGatewayStart() {
+        dispatch("gateway_start", Map.<String, Object>of("type", "jclaw",
+                "pid", ProcessHandle.current().pid(), "startAt", Instant.now().toString()));
+    }
+
+    @EventListener(ContextClosedEvent.class)
+    public void onGatewayStop() {
+        dispatch("gateway_stop", Map.<String, Object>of("type", "jclaw",
+                "pid", ProcessHandle.current().pid()));
     }
 
     /** {@code true}, wenn der Node-Sidecar-Prozess aktiv läuft. */

@@ -36,6 +36,7 @@ import org.springframework.stereotype.Component;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 @Component
 public class OllamaAiAdapter implements AiProviderPort {
@@ -48,6 +49,7 @@ public class OllamaAiAdapter implements AiProviderPort {
     private final List<ToolCallback> toolCallbacks;
     private final HookCallback hookCallback;
     private final CompactionService compactionService;
+    private final ObjectProvider<NodeSidecarPluginRuntime> nodeSidecarPluginRuntimeProvider;
 
     public OllamaAiAdapter(ChatModel chatModel, ToolCallingManager toolCallingManager, List<AgentTool> tools,
                            ObjectProvider<McpToolRegistry> mcpToolRegistry, ChatMemory chatMemory,
@@ -59,6 +61,7 @@ public class OllamaAiAdapter implements AiProviderPort {
         this.chatMemory = chatMemory;
         this.hookCallback = hookCallbackProvider.getIfAvailable();
         this.compactionService = compactionServiceProvider.getIfAvailable();
+        this.nodeSidecarPluginRuntimeProvider = nodeSidecarPluginRuntimeProvider;
         List<ToolCallback> callbacks = new ArrayList<>(List.of(ToolCallbacks.from(tools.toArray())));
         McpToolRegistry mcpRegistry = mcpToolRegistry.getIfAvailable();
         if (mcpRegistry != null) {
@@ -89,6 +92,13 @@ public class OllamaAiAdapter implements AiProviderPort {
     public AgentResponse execute(AgentCommand command, String systemPrompt, int maxIterations) {
         boolean hasContext = command.contextId() != null && !command.contextId().isBlank();
 
+        // before_model_resolve (OpenClaw): beobachtet vor der Modell-/Provider-Auswahl.
+        dispatchPluginHook("before_model_resolve", Map.<String, Object>of(
+                "sessionId", command.contextId() == null ? "" : command.contextId(),
+                "model", chatModel.getOptions() != null && chatModel.getOptions().getModel() != null
+                        ? chatModel.getOptions().getModel() : "unknown",
+                "provider", "ollama"));
+
         List<Message> messages = new ArrayList<>();
         messages.add(new SystemMessage(systemPrompt));
         if (hasContext) {
@@ -106,6 +116,11 @@ public class OllamaAiAdapter implements AiProviderPort {
             messages.addAll(history);
         }
         messages.add(new UserMessage(command.prompt()));
+
+        // before_prompt_build (OpenClaw): beobachtet vor dem Zusammenbau des Prompts.
+        dispatchPluginHook("before_prompt_build", Map.<String, Object>of(
+                "sessionId", command.contextId() == null ? "" : command.contextId(),
+                "messages", messages.size()));
 
         ChatOptions defaultOptions = chatModel.getOptions();
         ToolCallingChatOptions.Builder<?> builder = defaultOptions instanceof ToolCallingChatOptions toolCallingOptions
@@ -183,6 +198,17 @@ public class OllamaAiAdapter implements AiProviderPort {
             String result = findToolResult(toolExecutionResult, toolCall.id());
             target.add(new ToolInvocation(toolCall.name(), toolCall.arguments(), result));
             log.info("Tool-Aufruf: {} (Argumente={}) -> {}", toolCall.name(), toolCall.arguments(), result);
+            // tool_result_persist (OpenClaw): beobachtet nach dem Ausführen eines Plugin-Tools.
+            dispatchPluginHook("tool_result_persist", Map.of("tool", toolCall.name(), "arguments", toolCall.arguments(),
+                    "result", result));
+        }
+    }
+
+    /** Dispatcht einen Plugin-Hook, falls eine Plugin-Runtime verfügbar ist (No-op sonst). */
+    private void dispatchPluginHook(String event, Map<String, Object> ctx) {
+        NodeSidecarPluginRuntime runtime = nodeSidecarPluginRuntimeProvider.getIfAvailable();
+        if (runtime != null) {
+            runtime.dispatch(event, ctx);
         }
     }
 

@@ -339,6 +339,159 @@ class NodeSidecarBridgeTest {
         }
     }
 
+    // --- plugin.callHook (P4-01 Folgearbeit „Voll-Hook-Katalog") ---
+
+    @Test
+    @EnabledIf("nodeAvailable")
+    void callHookUnknownEventReportsUnblockedEmptyCount() throws IOException {
+        try (NodeSidecarBridge bridge = NodeSidecarBridge.start(NodeSidecarBridge.pluginScript(), objectMapper)) {
+            JsonNode result = bridge.callHook("gibtsNicht", null, null);
+
+            assertThat(result.path("blocked").asBoolean(false)).isFalse();
+            assertThat(result.path("count").asInt()).isZero();
+            assertThat(result.path("event").asString()).isEqualTo("gibtsNicht");
+        }
+    }
+
+    @Test
+    @EnabledIf("nodeAvailable")
+    void callHookMissingEventRaisesInvalidParams() throws IOException {
+        try (NodeSidecarBridge bridge = NodeSidecarBridge.start(NodeSidecarBridge.pluginScript(), objectMapper)) {
+            assertThatThrownBy(() -> bridge.callHook(null, null, null))
+                    .isInstanceOf(SidecarCallException.class)
+                    .satisfies(e -> assertThat(((SidecarCallException) e).code())
+                            .isEqualTo(NodeSidecarBridge.ERROR_INVALID_PARAMS))
+                    .hasMessageContaining("event");
+        }
+    }
+
+    @Test
+    @EnabledIf("nodeAvailable")
+    void callHookBlockingHookThrowsBlockedDecision() throws IOException {
+        Path plugin = Files.createDirectories(tempDir.resolve("hook-block-throw"));
+        write(plugin, "src/index.js", """
+                module.exports = definePluginEntry({
+                  id: 'acme/hook-block-throw',
+                  name: 'Hook Block Throw',
+                  register(api) {
+                    api.on('before_agent_run', (ctx) => {
+                      throw new Error('Kein Agent-Lauf.');
+                    });
+                  }
+                });
+                """);
+
+        try (NodeSidecarBridge bridge = NodeSidecarBridge.start(NodeSidecarBridge.pluginScript(), objectMapper)) {
+            bridge.loadPluginBundle("acme/hook-block-throw", plugin.resolve("src/index.js"), plugin);
+
+            JsonNode result = bridge.callHook("before_agent_run", null,
+                    objectMapper.createObjectNode().put("agent", "jclaw"));
+
+            assertThat(result.path("blocked").asBoolean(false)).isTrue();
+            assertThat(result.path("count").asInt()).isEqualTo(1);
+            assertThat(result.path("message").asString()).contains("Kein Agent-Lauf");
+        }
+    }
+
+    @Test
+    @EnabledIf("nodeAvailable")
+    void callHookBlockReturnValueCarriesMessage() throws IOException {
+        Path plugin = Files.createDirectories(tempDir.resolve("hook-block-return"));
+        write(plugin, "src/index.js", """
+                module.exports = definePluginEntry({
+                  id: 'acme/hook-block-return',
+                  name: 'Hook Block Return',
+                  register(api) {
+                    api.on('message_sending', (ctx) => ({
+                      block: true,
+                      message: 'Moment, noch nicht senden.'
+                    }));
+                  }
+                });
+                """);
+
+        try (NodeSidecarBridge bridge = NodeSidecarBridge.start(NodeSidecarBridge.pluginScript(), objectMapper)) {
+            bridge.loadPluginBundle("acme/hook-block-return", plugin.resolve("src/index.js"), plugin);
+
+            JsonNode result = bridge.callHook("message_sending", null, objectMapper.createObjectNode());
+
+            assertThat(result.path("blocked").asBoolean(false)).isTrue();
+            assertThat(result.path("count").asInt()).isEqualTo(1);
+            assertThat(result.path("message").asString()).isEqualTo("Moment, noch nicht senden.");
+        }
+    }
+
+    @Test
+    @EnabledIf("nodeAvailable")
+    void callHookRespectsNameMatcherAndPriorityOrder() throws IOException {
+        Path plugin = Files.createDirectories(tempDir.resolve("hook-matcher"));
+        write(plugin, "src/index.js", """
+                module.exports = definePluginEntry({
+                  id: 'acme/hook-matcher',
+                  name: 'Hook Matcher',
+                  register(api) {
+                    const hits = [];
+                    api.on('session_start', (ctx) => { hits.push('p10'); }, { priority: 10 });
+                    api.on('session_start', (ctx) => { hits.push('p1'); }, { priority: 1 });
+                    api.on('session_start', (ctx) => { hits.push('p5-scoped'); }, { matcher: 'gold', priority: 5 });
+                    api.registerTool({
+                      name: 'hook-hits',
+                      description: 'Liefert die Hook-Reihenfolge.',
+                      execute() { return { hits }; }
+                    });
+                    api.registerTool({
+                      name: 'hook-reset',
+                      description: 'Leert die Hook-Reihenfolge.',
+                      execute() { hits.length = 0; return { ok: true }; }
+                    });
+                  }
+                });
+                """);
+
+        try (NodeSidecarBridge bridge = NodeSidecarBridge.start(NodeSidecarBridge.pluginScript(), objectMapper)) {
+            bridge.loadPluginBundle("acme/hook-matcher", plugin.resolve("src/index.js"), plugin);
+
+            JsonNode scoped = bridge.callHook("session_start", "gold", null);
+            assertThat(scoped.path("blocked").asBoolean(false)).isFalse();
+            assertThat(scoped.path("count").asInt()).isEqualTo(3);
+            assertThat(bridge.callTool("hook-hits", null).path("hits").toString())
+                    .isEqualTo("[\"p10\",\"p5-scoped\",\"p1\"]");
+
+            bridge.callTool("hook-reset", null);
+            JsonNode other = bridge.callHook("session_start", "silber", null);
+            assertThat(other.path("count").asInt()).isEqualTo(2);
+            assertThat(bridge.callTool("hook-hits", null).path("hits").toString())
+                    .isEqualTo("[\"p10\",\"p1\"]");
+        }
+    }
+
+    @Test
+    @EnabledIf("nodeAvailable")
+    void callHookSlowerThanHookTimeoutIsTreatedAsBlocked() throws IOException {
+        Path plugin = Files.createDirectories(tempDir.resolve("hook-timeout"));
+        write(plugin, "src/index.js", """
+                module.exports = definePluginEntry({
+                  id: 'acme/hook-timeout',
+                  name: 'Hook Timeout',
+                  register(api) {
+                    api.on('before_prompt_build', (ctx) => {
+                      return new Promise((resolve) => setTimeout(() => resolve({ ok: true }), 1000));
+                    }, { timeoutMs: 150 });
+                  }
+                });
+                """);
+
+        try (NodeSidecarBridge bridge = NodeSidecarBridge.start(NodeSidecarBridge.pluginScript(), objectMapper)) {
+            bridge.loadPluginBundle("acme/hook-timeout", plugin.resolve("src/index.js"), plugin);
+
+            JsonNode result = bridge.callHook("before_prompt_build", null, objectMapper.createObjectNode());
+
+            assertThat(result.path("blocked").asBoolean(false)).isTrue();
+            assertThat(result.path("count").asInt()).isEqualTo(1);
+            assertThat(result.path("message").asString()).contains("Timeout");
+        }
+    }
+
     private static JsonNode add(NodeSidecarBridge bridge, int a, int b) throws Exception {
         return bridge.callTool("add", new ObjectMapper().createObjectNode().put("a", a).put("b", b));
     }

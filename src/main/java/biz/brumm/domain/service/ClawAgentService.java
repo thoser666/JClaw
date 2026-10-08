@@ -8,12 +8,15 @@ import biz.brumm.domain.model.Session;
 import biz.brumm.domain.model.Skill;
 import biz.brumm.domain.port.in.ExecuteTaskUseCase;
 import biz.brumm.domain.port.out.AiProviderPort;
+import biz.brumm.domain.port.out.PluginHookDispatcher;
 import biz.brumm.domain.port.out.SkillProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
+import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -33,15 +36,17 @@ public class ClawAgentService implements ExecuteTaskUseCase {
     private final SkillProperties skillProperties;
     private final SkillProvider skillProvider;
     private final SessionService sessionService;
+    private final PluginHookDispatcher pluginHooks;
 
     public ClawAgentService(AiProviderPort aiProviderPort, ClawAgentProperties properties,
                             SkillProperties skillProperties, SkillProvider skillProvider,
-                            SessionService sessionService) {
+                            SessionService sessionService, PluginHookDispatcher pluginHooks) {
         this.aiProviderPort = aiProviderPort;
         this.properties = properties;
         this.skillProperties = skillProperties;
         this.skillProvider = skillProvider;
         this.sessionService = sessionService;
+        this.pluginHooks = pluginHooks;
     }
 
     @Override
@@ -62,16 +67,40 @@ public class ClawAgentService implements ExecuteTaskUseCase {
             sessionId = session.sessionId();
         }
 
-        AgentCommand resolvedCommand = new AgentCommand(command.prompt(), effectiveContextId);
+        String resolvedContextId = effectiveContextId;
+
+        // before_agent_run (OpenClaw): blockbarer Hook vor der eigentlichen Verarbeitung.
+        // Blockiert, liefert der Agent eine Antwort ohne den Provider zu rufen.
+        PluginHookDispatcher.HookOutcome runDecision = pluginHooks.dispatch("before_agent_run",
+                Map.of("agent", "jclaw", "task", command.prompt(), "sessionId", sessionId == null ? "" : sessionId));
+        if (runDecision.blocked()) {
+            log.warn("Agent-Ausführung blockiert durch before_agent_run-Hook: {}", runDecision.message());
+            return AgentResponse.blocked("Agent-Ausführung blockiert durch Plugin-Hook: " + runDecision.message());
+        }
+
+        AgentCommand resolvedCommand = new AgentCommand(command.prompt(), resolvedContextId);
         AgentResponse rawResponse = aiProviderPort.execute(resolvedCommand, buildSystemPrompt(),
                 properties.maxIterations());
 
+        // before_agent_finalize (OpenClaw): beobachtet vor dem Zusammenbau der finalen
+        // Antwort (Katalog-Registrierung, JClaw emittiert die Stage ohne Block-Auswertung).
+        pluginHooks.dispatch("before_agent_finalize",
+                Map.of("agent", "jclaw", "sessionId", sessionId == null ? "" : sessionId));
+
+        AgentResponse finalResponse;
         if (sessionId != null) {
             sessionService.touchSession(sessionId, command.prompt());
-            return new AgentResponse(rawResponse.content(), rawResponse.timestamp(),
+            finalResponse = new AgentResponse(rawResponse.content(), rawResponse.timestamp(),
                     rawResponse.toolInvocations(), rawResponse.iterations(), sessionId);
+        } else {
+            finalResponse = rawResponse;
         }
-        return rawResponse;
+
+        // agent_end (OpenClaw): beobachtet nach Abschluss des Agent-Laufs.
+        pluginHooks.dispatch("agent_end",
+                Map.of("agent", "jclaw", "sessionId", sessionId == null ? "" : sessionId,
+                        "iterations", finalResponse.iterations(), "timestamp", Instant.now().toString()));
+        return finalResponse;
     }
 
     private String buildSystemPrompt() {

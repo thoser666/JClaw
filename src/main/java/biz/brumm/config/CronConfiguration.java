@@ -1,6 +1,7 @@
 package biz.brumm.config;
 
 import biz.brumm.domain.port.out.CronJobStore;
+import biz.brumm.domain.port.out.PluginHookDispatcher;
 import biz.brumm.domain.service.CronSchedulerService;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -14,7 +15,8 @@ import org.springframework.context.annotation.Configuration;
 public class CronConfiguration {
 
     @Bean
-    public CronSchedulerService cronSchedulerService(CronJobStore cronJobStore, CronProperties cronProperties) {
-        return new CronSchedulerService(cronJobStore, cronProperties);
+    public CronSchedulerService cronSchedulerService(CronJobStore cronJobStore, CronProperties cronProperties,
+                                                     PluginHookDispatcher pluginHooks) {
+        return new CronSchedulerService(cronJobStore, cronProperties, pluginHooks);
     }
 }

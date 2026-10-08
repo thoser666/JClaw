@@ -4,6 +4,7 @@ import biz.brumm.config.GuardrailProperties;
 import biz.brumm.domain.model.*;
 import biz.brumm.domain.port.out.ChannelAdapter;
 import biz.brumm.domain.port.out.ChannelStore;
+import biz.brumm.domain.port.out.PluginHookDispatcher;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -33,10 +34,12 @@ class ChannelServiceTest {
 
     private Channel telegramChannel;
 
+    private final PluginHookDispatcher pluginHooks = PluginHookDispatcher.noop();
+
     @BeforeEach
     void setUp() {
         when(telegramAdapter.channelType()).thenReturn(ChannelType.TELEGRAM);
-        channelService = new ChannelService(channelStore, List.of(telegramAdapter), guardDisabled());
+        channelService = new ChannelService(channelStore, List.of(telegramAdapter), guardDisabled(), pluginHooks);
         telegramChannel = new Channel("ch-1", "Telegram Bot", ChannelType.TELEGRAM, true,
                 Map.of("token", "abc"), Instant.now(), Instant.now());
     }
@@ -129,7 +132,7 @@ class ChannelServiceTest {
     @Test
     void sendRedactsKnownSecretFromOutboundContent() throws ChannelAdapter.ChannelException {
         ChannelService guarded = new ChannelService(channelStore, List.of(telegramAdapter),
-                guardWithSecrets(List.of("TOPSECRET")));
+                guardWithSecrets(List.of("TOPSECRET")), pluginHooks);
         ChannelMessage sent = ChannelMessage.outbound("ch-1", "[REDACTED]", null, "sess-1");
         when(telegramAdapter.isAvailable(telegramChannel)).thenReturn(true);
         when(telegramAdapter.send(eq(telegramChannel), any())).thenReturn(sent);

@@ -3,6 +3,7 @@ package biz.brumm.domain.service;
 import biz.brumm.config.SessionProperties;
 import biz.brumm.domain.model.Session;
 import biz.brumm.domain.port.out.ConversationStore;
+import biz.brumm.domain.port.out.PluginHookDispatcher;
 import biz.brumm.domain.port.out.SessionStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -14,6 +15,7 @@ import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 @Service
@@ -26,13 +28,16 @@ public class SessionService {
     private final ConversationStore conversationStore;
     private final SessionProperties properties;
     private final CredentialLeakGuard credentialLeakGuard;
+    private final PluginHookDispatcher pluginHooks;
 
     public SessionService(SessionStore sessionStore, ConversationStore conversationStore,
-                          SessionProperties properties, CredentialLeakGuard credentialLeakGuard) {
+                          SessionProperties properties, CredentialLeakGuard credentialLeakGuard,
+                          PluginHookDispatcher pluginHooks) {
         this.sessionStore = sessionStore;
         this.conversationStore = conversationStore;
         this.properties = properties;
         this.credentialLeakGuard = credentialLeakGuard;
+        this.pluginHooks = pluginHooks;
     }
 
     public Optional<Session> findSession(String sessionId) {
@@ -45,7 +50,11 @@ public class SessionService {
     public Session createSession(String sessionId) {
         Instant now = Instant.now();
         Session session = new Session(sessionId, null, now, now, now);
-        return sessionStore.save(session);
+        Session saved = sessionStore.save(session);
+        // session_start (OpenClaw): beobachtet nach dem Anlegen der Session.
+        pluginHooks.dispatch("session_start",
+                Map.of("sessionId", sessionId, "reason", "new", "startedAt", saved.sessionStartedAt().toString()));
+        return saved;
     }
 
     public Session touchSession(String sessionId, String prompt) {
@@ -97,6 +106,8 @@ public class SessionService {
     public void deleteSession(String sessionId) {
         conversationStore.deleteByContextId(sessionId);
         sessionStore.deleteById(sessionId);
+        // session_end (OpenClaw): beobachtet nach dem Entfernen der Session.
+        pluginHooks.dispatch("session_end", Map.of("sessionId", sessionId, "reason", "deleted"));
     }
 
     private Session sanitize(Session session) {

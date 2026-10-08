@@ -3,12 +3,14 @@ package biz.brumm.domain.service;
 import biz.brumm.config.CronProperties;
 import biz.brumm.domain.model.CronJob;
 import biz.brumm.domain.port.out.CronJobStore;
+import biz.brumm.domain.port.out.PluginHookDispatcher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -21,6 +23,7 @@ public class CronSchedulerService {
 
     private final CronJobStore cronJobStore;
     private final CronProperties cronProperties;
+    private final PluginHookDispatcher pluginHooks;
     private final List<CronJobListener> listeners = new ArrayList<>();
 
     /**
@@ -31,9 +34,11 @@ public class CronSchedulerService {
         void onExecute(String prompt, String contextId);
     }
 
-    public CronSchedulerService(CronJobStore cronJobStore, CronProperties cronProperties) {
+    public CronSchedulerService(CronJobStore cronJobStore, CronProperties cronProperties,
+                                PluginHookDispatcher pluginHooks) {
         this.cronJobStore = cronJobStore;
         this.cronProperties = cronProperties;
+        this.pluginHooks = pluginHooks;
     }
 
     public void addListener(CronJobListener listener) {
@@ -50,6 +55,9 @@ public class CronSchedulerService {
 
         Instant now = Instant.now();
         List<CronJob> enabledJobs = cronJobStore.findEnabled();
+        // cron_reconciled (OpenClaw): beobachtet nach dem Erheben der fälligen/aktiven Jobs.
+        pluginHooks.dispatch("cron_reconciled",
+                Map.of("activeJobs", enabledJobs.size(), "checkedAt", now.toString()));
 
         for (CronJob job : enabledJobs) {
             if (job.nextRunAt() != null && job.nextRunAt().isBefore(now)) {
@@ -80,9 +88,17 @@ public class CronSchedulerService {
                 }
             }
 
+            // cron_changed (OpenClaw): beobachtet — Job-Lauf gestartet.
+            pluginHooks.dispatch("cron_changed",
+                    Map.of("jobId", job.id(), "name", job.name(), "status", "started", "at", now.toString()));
+
             // Job aktualisieren
             CronJob updated = job.withLastRun(now, nextRun);
             cronJobStore.save(updated);
+            // cron_changed (OpenClaw): beobachtet — Job-Lauf beendet.
+            pluginHooks.dispatch("cron_changed",
+                    Map.of("jobId", job.id(), "name", job.name(), "status", "finished",
+                            "nextRunAt", nextRun.toString()));
             log.info("CronJob '{}' erfolgreich ausgeführt. Nächster Lauf: {}", job.name(), nextRun);
         } catch (Exception e) {
             log.error("Fehler beim Ausführen von CronJob '{}': {}", job.name(), e.getMessage());
@@ -108,7 +124,11 @@ public class CronSchedulerService {
                 nextRun,
                 now);
 
-        return cronJobStore.save(job);
+        CronJob saved = cronJobStore.save(job);
+        // cron_changed (OpenClaw): beobachtet — neuer Job angelegt.
+        pluginHooks.dispatch("cron_changed",
+                Map.of("jobId", saved.id(), "name", saved.name(), "status", "added", "nextRunAt", nextRun.toString()));
+        return saved;
     }
 
     /**
@@ -117,6 +137,10 @@ public class CronSchedulerService {
     public CronJob recalculateNextRun(CronJob job) {
         Instant now = Instant.now();
         Instant nextRun = CronExpression.parse(job.cronExpression()).nextExecutionAfter(now);
-        return job.withNextRun(nextRun);
+        CronJob updated = job.withNextRun(nextRun);
+        // cron_changed (OpenClaw): beobachtet — Job-Plan aktualisiert.
+        pluginHooks.dispatch("cron_changed",
+                Map.of("jobId", job.id(), "name", job.name(), "status", "updated", "nextRunAt", nextRun.toString()));
+        return updated;
     }
 }

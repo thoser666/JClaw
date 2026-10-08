@@ -3,6 +3,7 @@ package biz.brumm.domain.service;
 import biz.brumm.config.CronProperties;
 import biz.brumm.domain.model.CronJob;
 import biz.brumm.domain.port.out.CronJobStore;
+import biz.brumm.domain.port.out.PluginHookDispatcher;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -29,10 +30,12 @@ class CronSchedulerServiceTest {
 
     private CronProperties cronProperties;
 
+    private final PluginHookDispatcher pluginHooks = PluginHookDispatcher.noop();
+
     @BeforeEach
     void setUp() {
         cronProperties = CronProperties.of(true, 60, 3);
-        schedulerService = new CronSchedulerService(cronJobStore, cronProperties);
+        schedulerService = new CronSchedulerService(cronJobStore, cronProperties, pluginHooks);
     }
 
     @Test

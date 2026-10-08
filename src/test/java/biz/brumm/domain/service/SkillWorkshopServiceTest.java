@@ -6,6 +6,7 @@ import biz.brumm.domain.model.Skill;
 import biz.brumm.domain.model.SkillProposal;
 import biz.brumm.domain.model.SkillProposalStatus;
 import biz.brumm.domain.model.SkillProposalType;
+import biz.brumm.domain.port.out.PluginHookDispatcher;
 import biz.brumm.domain.port.out.SkillProposalStore;
 import biz.brumm.domain.port.out.SkillWorkshopWriter;
 import org.junit.jupiter.api.BeforeEach;
@@ -31,11 +32,13 @@ class SkillWorkshopServiceTest {
     private FakeWriter writer;
     private SkillWorkshopService service;
 
+    private final PluginHookDispatcher pluginHooks = PluginHookDispatcher.noop();
+
     @BeforeEach
     void setUp() {
         store = new FakeStore();
         writer = new FakeWriter();
-        service = new SkillWorkshopService(store, writer, new SkillWorkshopProperties(null, 0, 0, null));
+        service = new SkillWorkshopService(store, writer, new SkillWorkshopProperties(null, 0, 0, null), pluginHooks);
     }
 
     @Test
@@ -67,7 +70,7 @@ class SkillWorkshopServiceTest {
     @Test
     void proposeCreateRejectsContentOverMaxSkillBytes() {
         SkillWorkshopService small = new SkillWorkshopService(store, writer,
-                new SkillWorkshopProperties(null, 50, 5, null));
+                new SkillWorkshopProperties(null, 50, 5, null), pluginHooks);
 
         assertThatThrownBy(() -> small.proposeCreate("name", "A", "123456"))
                 .isInstanceOf(IllegalArgumentException.class)
@@ -87,7 +90,7 @@ class SkillWorkshopServiceTest {
     @Test
     void proposeCreateEnforcesMaxPending() {
         SkillWorkshopService capped = new SkillWorkshopService(store, writer,
-                new SkillWorkshopProperties(null, 1, 0, null));
+                new SkillWorkshopProperties(null, 1, 0, null), pluginHooks);
         capped.proposeCreate("one", "A", "a");
 
         assertThatThrownBy(() -> capped.proposeCreate("two", "B", "b"))
@@ -232,7 +235,7 @@ class SkillWorkshopServiceTest {
     @Test
     void agentInitiatedApplyRunsUnderAutoPolicy() {
         SkillWorkshopService auto = new SkillWorkshopService(store, writer,
-                new SkillWorkshopProperties(ApprovalPolicy.AUTO, 0, 0, null));
+                new SkillWorkshopProperties(ApprovalPolicy.AUTO, 0, 0, null), pluginHooks);
         SkillProposal proposal = auto.proposeCreate("morning-catchup", "A", "a");
 
         SkillProposal applied = auto.apply(proposal.proposalId(), true);
@@ -274,7 +277,7 @@ class SkillWorkshopServiceTest {
     @Test
     void quarantineCountsAgainstMaxPending() {
         SkillWorkshopService capped = new SkillWorkshopService(store, writer,
-                new SkillWorkshopProperties(null, 1, 0, null));
+                new SkillWorkshopProperties(null, 1, 0, null), pluginHooks);
         SkillProposal one = capped.proposeCreate("one", "A", "a");
         capped.quarantine(one.proposalId(), "review", false);
 
@@ -295,7 +298,8 @@ class SkillWorkshopServiceTest {
     @Test
     void configExposesConfiguredValues() {
         SkillWorkshopService auto = new SkillWorkshopService(store, writer,
-                new SkillWorkshopProperties(ApprovalPolicy.AUTO, 7, 1234, new SkillWorkshopProperties.Autonomous(true)));
+                new SkillWorkshopProperties(ApprovalPolicy.AUTO, 7, 1234, new SkillWorkshopProperties.Autonomous(true)),
+                pluginHooks);
 
         assertThat(auto.config().approvalPolicy()).isEqualTo(ApprovalPolicy.AUTO);
         assertThat(auto.config().maxPending()).isEqualTo(7);

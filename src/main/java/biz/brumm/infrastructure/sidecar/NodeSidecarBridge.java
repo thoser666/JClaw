@@ -51,9 +51,12 @@ public class NodeSidecarBridge implements Closeable {
     public static final String METHOD_CALL_TOOL = "tool.call";
     public static final String METHOD_PLUGIN_LOAD = "plugin.load";
     public static final String METHOD_PLUGIN_UNLOAD = "plugin.unload";
+    public static final String METHOD_CALL_HOOK = "plugin.callHook";
     public static final String METHOD_CHANNEL_DELIVER = "channel.deliver";
 
     public static final int ERROR_METHOD_NOT_FOUND = -32601;
+    /** JSON-RPC-Standardcode (siehe {@code plugin.callHook}): Parameter unvollständig/ungültig. */
+    public static final int ERROR_INVALID_PARAMS = -32602;
     public static final int ERROR_TOOL_NOT_FOUND = -32001;
     public static final int ERROR_TOOL_EXECUTION = -32002;
     public static final int ERROR_INTERNAL = -32003;
@@ -247,6 +250,29 @@ public class NodeSidecarBridge implements Closeable {
         ObjectNode params = objectMapper.createObjectNode();
         params.put("id", id);
         return execute(METHOD_PLUGIN_UNLOAD, params);
+    }
+
+    /**
+     * Dispatcht einen OpenClaw-Plugin-Hook ({@code plugin.callHook}, P4-01 Folgearbeit
+     * „Voll-Hook-Katalog"): alle registrierten Hooks für {@code event} (ggf. auf
+     * {@code name} als Matcher eingeschränkt, z. B. Tool-Name) laufen in
+     * Prioritäts-Reihenfolge; ein werfender/blockender Hook stoppt den Dispatch.
+     * <p>
+     * Das Ergebnis trägt {@code blocked} ({@code true}, wenn ein Hook blockiert hat),
+     * {@code count} und optional {@code message}. Unbekannte Stages liefern
+     * {@code count: 0, blocked: false} (Katalog = Registrierungs-API).
+     */
+    public JsonNode callHook(String event, String name, JsonNode ctx)
+            throws IOException, SidecarCallException, SidecarTimeoutException {
+        ObjectNode params = objectMapper.createObjectNode();
+        params.put("event", event);
+        if (name != null) {
+            params.put("name", name);
+        }
+        if (ctx != null) {
+            params.set("ctx", ctx);
+        }
+        return execute(METHOD_CALL_HOOK, params);
     }
 
     /**

@@ -3,6 +3,7 @@ package biz.brumm.infrastructure.adapter.out.plugin;
 import biz.brumm.config.PluginProperties;
 import biz.brumm.config.PluginRuntimeProperties;
 import biz.brumm.domain.model.Plugin;
+import biz.brumm.domain.port.out.PluginHookDispatcher;
 import biz.brumm.infrastructure.sidecar.NodeSidecarBridge;
 import biz.brumm.infrastructure.sidecar.SidecarCallException;
 import org.junit.jupiter.api.Test;
@@ -17,6 +18,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
@@ -220,11 +222,16 @@ class NodeSidecarPluginRuntimeTest {
                       execute(args) { return { greeting: 'Hallo ' + args.name }; }
                     });
                     api.on('before_model_resolve', () => {});
+                    api.on('agent_turn_prepare', () => {});
                     api.on('before_prompt_build', () => {});
                     api.on('before_agent_run', () => {});
                     api.on('before_agent_reply', () => {});
                     api.on('before_agent_finalize', () => {});
                     api.on('agent_end', () => {});
+                    api.on('llm_input', () => {});
+                    api.on('llm_output', () => {});
+                    api.on('model_call_started', () => {});
+                    api.on('model_call_ended', () => {});
                     api.on('before_tool_call', () => {});
                     api.on('after_tool_call', () => {});
                     api.on('tool_result_persist', () => {});
@@ -232,13 +239,20 @@ class NodeSidecarPluginRuntimeTest {
                     api.on('message_sending', () => {});
                     api.on('message_sent', () => {});
                     api.on('reply_payload_sending', () => {});
+                    api.on('before_message_write', () => {});
+                    api.on('before_dispatch', () => {});
+                    api.on('reply_dispatch', () => {});
                     api.on('session_start', () => {});
                     api.on('session_end', () => {});
+                    api.on('before_compaction', () => {});
+                    api.on('after_compaction', () => {});
+                    api.on('before_reset', () => {});
                     api.on('gateway_start', () => {});
                     api.on('gateway_stop', () => {});
                     api.on('cron_reconciled', () => {});
                     api.on('cron_changed', () => {});
                     api.on('before_install', () => {});
+                    api.on('resolve_exec_env', () => {});
                     api.on('skill_proposal_evaluate', () => {});
                     api.on('skill_changed', () => {});
                   }
@@ -252,13 +266,16 @@ class NodeSidecarPluginRuntimeTest {
             assertThat(receipt.orElseThrow().hooks())
                     .extracting(NodeSidecarPluginRuntime.PluginHookRegistration::event)
                     .containsExactlyInAnyOrder(
-                            "before_model_resolve", "before_prompt_build", "before_agent_run",
-                            "before_agent_reply", "before_agent_finalize", "agent_end",
+                            "before_model_resolve", "agent_turn_prepare", "before_prompt_build",
+                            "before_agent_run", "before_agent_reply", "before_agent_finalize", "agent_end",
+                            "llm_input", "llm_output", "model_call_started", "model_call_ended",
                             "before_tool_call", "after_tool_call", "tool_result_persist",
                             "message_received", "message_sending", "message_sent", "reply_payload_sending",
+                            "before_message_write", "before_dispatch", "reply_dispatch",
                             "session_start", "session_end",
+                            "before_compaction", "after_compaction", "before_reset",
                             "gateway_start", "gateway_stop", "cron_reconciled", "cron_changed",
-                            "before_install",
+                            "before_install", "resolve_exec_env",
                             "skill_proposal_evaluate", "skill_changed");
 
             JsonNode allowed = runtime.callTool("greet", objectMapper.createObjectNode().put("name", "Anna"));
@@ -610,6 +627,109 @@ class NodeSidecarPluginRuntimeTest {
             assertThat(runtime.isLoaded("acme/localpin")).isTrue();
             assertThat(runtime.tools()).extracting(t -> t.name())
                     .contains("localpin-tool");
+        }
+    }
+
+    // --- plugin.callHook-Dispatch (P4-01 Folgearbeit „Voll-Hook-Katalog") ---
+
+    @Test
+    @EnabledIf("nodeAvailable")
+    void beforeInstallHookCanBlockPluginLoad() throws IOException {
+        Path guardDir = pluginDir("install-guard", "acme/install-guard", """
+                module.exports = definePluginEntry({
+                  id: 'acme/install-guard', name: 'Install Guard',
+                  register(api) {
+                    api.on('before_install', (ctx) => {
+                      if (ctx && ctx.pluginId === 'acme/blocked') {
+                        throw new Error('Nicht zum Sidecar.');
+                      }
+                    });
+                    api.registerTool({
+                      name: 'guard-tool',
+                      description: '.',
+                      execute() { return { ok: true }; }
+                    });
+                  }
+                });
+                """);
+        Path blockedDir = pluginDir("installed-blocked", "acme/blocked", """
+                module.exports = definePluginEntry({
+                  id: 'acme/blocked', name: 'Blocked Install',
+                  register(api) {
+                    api.registerTool({
+                      name: 'blocked-tool',
+                      description: '.',
+                      execute() { return { ok: true }; }
+                    });
+                  }
+                });
+                """);
+
+        try (NodeSidecarPluginRuntime runtime = runtime(tempDir)) {
+            Optional<NodeSidecarPluginRuntime.PluginLoadReceipt> guard =
+                    runtime.load(plugin(tempDir, "acme/install-guard"));
+            assertThat(guard).isPresent();
+            assertThat(runtime.tools()).extracting(t -> t.name()).contains("guard-tool");
+
+            Optional<NodeSidecarPluginRuntime.PluginLoadReceipt> blocked =
+                    runtime.load(plugin(tempDir, "acme/blocked"));
+
+            assertThat(blocked).isEmpty();
+            assertThat(runtime.isLoaded("acme/blocked")).isFalse();
+            assertThat(runtime.tools()).extracting(t -> t.name()).doesNotContain("blocked-tool");
+        }
+    }
+
+    @Test
+    @EnabledIf("nodeAvailable")
+    void genericHookDispatchRunsHooksAndHonorsBlocking() throws IOException {
+        Path pluginDir = pluginDir("session-observer", "acme/session-observer", """
+                module.exports = definePluginEntry({
+                  id: 'acme/session-observer', name: 'Session Observer',
+                  register(api) {
+                    let seen = null;
+                    api.on('session_start', (ctx) => {
+                      if (ctx && ctx.sessionId === 'block') {
+                        throw new Error('Session blockiert.');
+                      }
+                      seen = ctx;
+                    }, { priority: 5 });
+                    api.registerTool({
+                      name: 'last-seen',
+                      description: 'Liefert den letzten Session-Kontext.',
+                      execute() { return { seen }; }
+                    });
+                  }
+                });
+                """);
+
+        try (NodeSidecarPluginRuntime runtime = runtime(tempDir)) {
+            Optional<NodeSidecarPluginRuntime.PluginLoadReceipt> receipt =
+                    runtime.load(plugin(tempDir, "acme/session-observer"));
+            assertThat(receipt).isPresent();
+
+            PluginHookDispatcher.HookOutcome ok = runtime.dispatch("session_start", null,
+                    Map.of("sessionId", "s1", "reason", "new"));
+            assertThat(ok.blocked()).isFalse();
+            assertThat(runtime.callTool("last-seen", null).path("seen").path("sessionId").asString())
+                    .isEqualTo("s1");
+
+            PluginHookDispatcher.HookOutcome blocked = runtime.dispatch("session_start", null,
+                    Map.of("sessionId", "block", "reason", "test"));
+            assertThat(blocked.blocked()).isTrue();
+            assertThat(blocked.message()).contains("Session blockiert");
+        }
+    }
+
+    @Test
+    @EnabledIf("nodeAvailable")
+    void dispatchWithoutPluginsReturnsProceedWithoutStartingSidecar() throws IOException {
+        try (NodeSidecarPluginRuntime runtime = runtime(tempDir)) {
+            PluginHookDispatcher.HookOutcome outcome = runtime.dispatch("session_start", null, Map.of());
+
+            assertThat(outcome.blocked()).isFalse();
+            assertThat(outcome.message()).isNull();
+            assertThat(runtime.active()).isFalse();
         }
     }
 

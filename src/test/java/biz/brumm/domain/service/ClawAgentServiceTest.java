@@ -10,6 +10,7 @@ import biz.brumm.domain.model.Session;
 import biz.brumm.domain.model.Skill;
 import biz.brumm.domain.port.out.AiProviderPort;
 import biz.brumm.domain.port.out.ConversationStore;
+import biz.brumm.domain.port.out.PluginHookDispatcher;
 import biz.brumm.domain.port.out.SessionStore;
 import biz.brumm.domain.port.out.SkillProvider;
 import org.junit.jupiter.api.Test;
@@ -45,17 +46,20 @@ class ClawAgentServiceTest {
     @Mock
     private ConversationStore conversationStore;
 
+    private final PluginHookDispatcher pluginHooks = PluginHookDispatcher.noop();
+
     private SessionService sessionService() {
         return new SessionService(sessionStore, conversationStore,
                 new SessionProperties("none", 4, 60),
-                new CredentialLeakGuard(new GuardrailProperties(false, List.of(), List.of()), null));
+                new CredentialLeakGuard(new GuardrailProperties(false, List.of(), List.of()), null),
+                pluginHooks);
     }
 
     @Test
     void handlePassesSystemPromptAndMaxIterationsToProvider() {
         ClawAgentProperties properties = new ClawAgentProperties(8, 10);
         ClawAgentService service = new ClawAgentService(aiProviderPort, properties,
-                new SkillProperties("./skills", List.of()), skillProvider, sessionService());
+                new SkillProperties("./skills", List.of()), skillProvider, sessionService(), pluginHooks);
         AgentResponse expected = AgentResponse.of("Antwort");
         when(skillProvider.findAll()).thenReturn(List.of());
         when(sessionStore.findById("ctx-1")).thenReturn(Optional.empty());
@@ -73,7 +77,7 @@ class ClawAgentServiceTest {
     void handleUsesConfiguredMaxIterations() {
         ClawAgentProperties properties = new ClawAgentProperties(3, 10);
         ClawAgentService service = new ClawAgentService(aiProviderPort, properties,
-                new SkillProperties("./skills", List.of()), skillProvider, sessionService());
+                new SkillProperties("./skills", List.of()), skillProvider, sessionService(), pluginHooks);
         when(skillProvider.findAll()).thenReturn(List.of());
         when(aiProviderPort.execute(any(AgentCommand.class), any(String.class), eq(3)))
                 .thenReturn(AgentResponse.of("Antwort"));
@@ -88,7 +92,7 @@ class ClawAgentServiceTest {
         ClawAgentProperties properties = new ClawAgentProperties(8, 10);
         SkillProperties skillProperties = new SkillProperties("./skills", List.of("code-review"));
         ClawAgentService service = new ClawAgentService(aiProviderPort, properties, skillProperties,
-                skillProvider, sessionService());
+                skillProvider, sessionService(), pluginHooks);
         Skill codeReview = new Skill("code-review", "Prueft Pull Requests.", "Pruefe Aenderungen auf Bugs.", "/skills/code-review");
         Skill disabled = new Skill("docs", "Schreibt Doku.", "Erstelle Doku.", "/skills/docs");
         when(skillProvider.findAll()).thenReturn(List.of(disabled, codeReview));
@@ -109,7 +113,7 @@ class ClawAgentServiceTest {
         ClawAgentProperties properties = new ClawAgentProperties(8, 10);
         SkillProperties skillProperties = new SkillProperties("./skills", List.of("lean"));
         ClawAgentService service = new ClawAgentService(aiProviderPort, properties, skillProperties,
-                skillProvider, sessionService());
+                skillProvider, sessionService(), pluginHooks);
         Skill lean = new Skill("lean", "   ", "   ", "/skills/lean");
         when(skillProvider.findAll()).thenReturn(List.of(lean));
         when(aiProviderPort.execute(any(AgentCommand.class), any(String.class), eq(8)))
@@ -127,7 +131,7 @@ class ClawAgentServiceTest {
     void handleWithoutContextIdDoesNotTouchSession() {
         ClawAgentProperties properties = new ClawAgentProperties(8, 10);
         ClawAgentService service = new ClawAgentService(aiProviderPort, properties,
-                new SkillProperties("./skills", List.of()), skillProvider, sessionService());
+                new SkillProperties("./skills", List.of()), skillProvider, sessionService(), pluginHooks);
         when(skillProvider.findAll()).thenReturn(List.of());
         when(aiProviderPort.execute(any(AgentCommand.class), any(String.class), eq(8)))
                 .thenReturn(AgentResponse.of("Antwort"));
@@ -142,7 +146,7 @@ class ClawAgentServiceTest {
     void handleWithExistingSessionDoesNotCreateNewOne() {
         ClawAgentProperties properties = new ClawAgentProperties(8, 10);
         ClawAgentService service = new ClawAgentService(aiProviderPort, properties,
-                new SkillProperties("./skills", List.of()), skillProvider, sessionService());
+                new SkillProperties("./skills", List.of()), skillProvider, sessionService(), pluginHooks);
         Session existing = new Session("s1", "Titel", Instant.now(), Instant.now(), Instant.now());
         when(sessionStore.findById("s1")).thenReturn(Optional.of(existing));
         when(sessionStore.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
@@ -159,7 +163,7 @@ class ClawAgentServiceTest {
     void handleCreatesSessionWhenNotFound() {
         ClawAgentProperties properties = new ClawAgentProperties(8, 10);
         ClawAgentService service = new ClawAgentService(aiProviderPort, properties,
-                new SkillProperties("./skills", List.of()), skillProvider, sessionService());
+                new SkillProperties("./skills", List.of()), skillProvider, sessionService(), pluginHooks);
         when(sessionStore.findById("new-s")).thenReturn(Optional.empty());
         when(sessionStore.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
         when(skillProvider.findAll()).thenReturn(List.of());
