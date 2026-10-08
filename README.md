@@ -246,7 +246,7 @@ module.exports = definePluginEntry({
 });
 ```
 
-Tools, Commands und Hooks werden zur Laufzeit registriert (`plugin.load`/`plugin.unload`); `before_tool_call`/`after_tool_call`-Hooks laufen beim Tool-Aufruf (Blocking via Fehlercode `-32005`). Bundles ohne Entry-Point bleiben Control-Plane-only. Voraussetzung: Node.js auf dem Zielsystem (für TypeScript-Entries ≥ 22.6). Details und Protokoll: [docs/bridge-protocol.md](docs/bridge-protocol.md) §8.
+Tools, Commands und Hooks werden zur Laufzeit registriert (`plugin.load`/`plugin.unload`); `before_tool_call`/`after_tool_call`-Hooks laufen beim Tool-Aufruf (Blocking via Fehlercode `-32005`). Der Java-Kern erreicht den gesamten Hook-Katalog außerdem als **Registrierungs-API** über `plugin.callHook` (P4-01-Folgearbeit): `PluginHookDispatcher` als Domain-Port (`dispatch(event, name, ctx)` → `HookOutcome` mit `blocked`/`message`) ist in den Channel-, Session-, Agent- (blockbar → `AgentResponse.blocked`), Cron- und Skill-Fluss sowie den Ollama-Adapter verdrahtet; ohne aktivierte Laufzeit greift eine No-op-Bean, die immer durchläuft. Bundles ohne Entry-Point bleiben Control-Plane-only. Voraussetzung: Node.js auf dem Zielsystem (für TypeScript-Entries ≥ 22.6). Details und Protokoll: [docs/bridge-protocol.md](docs/bridge-protocol.md) §8.
 
 ## Datei-Werkzeuge
 
