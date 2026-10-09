@@ -21,10 +21,13 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * Integrationstests des Bundle-Lademodus (P4-01 npm/TypeScript-Bundles) gegen das echte
  * Node.js-Runtime-Sidecar: hermetischer {@code require}-Scope (relative Module,
  * {@code node_modules}, Builtins, Escape-Rückweisungen) und TypeScript-Type-Stripping
- * im Sidecar ({@code .ts}/{@code .mts}/{@code .cts}, erasable Syntax).
+ * im Sidecar ({@code .ts}/{@code .mts}/{@code .cts}, erasable Syntax). Ab Spiegel-Test
+ * 952 zusätzlich echte ESM-Bundles ({@code import}/{@code export}) inkl. der
+ * SDK-Subpath-Imports {@code openclaw/plugin-sdk(,/plugin-entry)} und
+ * {@code openclaw-plugin(,/channel)}.
  * Übersprungen, wenn Node nicht verfügbar ist.
  * <p>
- * Spiegel-Test 925-941.
+ * Spiegel-Test 925-961.
  */
 class NodeSidecarPluginBundleTest {
 
@@ -496,6 +499,307 @@ class NodeSidecarPluginBundleTest {
 
             assertThat(bridge.callTool("cap", objectMapper.createObjectNode().put("text", "hallo"))
                     .path("out").asString()).isEqualTo("Hallo");
+        }
+    }
+
+    // Spiegel-Test 952 — ESM-TypeScript-Bundle: import aus openclaw/plugin-sdk/plugin-entry, export default.
+    @Test
+    @EnabledIf("nodeAvailable")
+    void esmEntryViaSdkSubpathImport() throws IOException {
+        Path plugin = Files.createDirectories(tempDir.resolve("esmsdk"));
+        write(plugin, "package.json", "{\"type\":\"module\"}");
+        write(plugin, "src/index.ts", """
+                import { definePluginEntry } from "openclaw/plugin-sdk/plugin-entry";
+                export default definePluginEntry({
+                  id: 'acme/esmsdk',
+                  name: 'ESM SDK',
+                  register(api) {
+                    api.registerTool({
+                      name: 'yell',
+                      description: 'Schreit einen Text.',
+                      execute(args) { return { out: String(args.text || '').toUpperCase() }; }
+                    });
+                  }
+                });
+                """);
+
+        try (NodeSidecarBridge bridge = bridge()) {
+            JsonNode receipt = loadBundle(bridge, plugin, "src/index.ts");
+            assertThat(receipt.path("name").asString()).isEqualTo("ESM SDK");
+
+            assertThat(bridge.callTool("yell", objectMapper.createObjectNode().put("text", "leise"))
+                    .path("out").asString()).isEqualTo("LEISE");
+        }
+    }
+
+    // Spiegel-Test 953 — .mts-Entry bindet einen ESM-Helper mit named exports ein (export const/function).
+    @Test
+    @EnabledIf("nodeAvailable")
+    void mtsEntryWithEsmNamedExportHelper() throws IOException {
+        Path plugin = Files.createDirectories(tempDir.resolve("mtsnamed"));
+        write(plugin, "src/index.mts", """
+                import { definePluginEntry } from "openclaw/plugin-sdk/plugin-entry";
+                import { double, triple } from './math.mts';
+                export default definePluginEntry({
+                  id: 'acme/mtsnamed',
+                  name: 'MTS Named',
+                  register(api) {
+                    api.registerTool({
+                      name: 'scale',
+                      description: 'Verdoppelt und verdreifacht.',
+                      execute(args) {
+                        const n = Number(args.n);
+                        return { doubled: double(n), tripled: triple(n) };
+                      }
+                    });
+                  }
+                });
+                """);
+        write(plugin, "src/math.mts", """
+                export const double = (n: number): number => n * 2;
+                export function triple(n: number): number { return n * 3; }
+                """);
+
+        try (NodeSidecarBridge bridge = bridge()) {
+            loadBundle(bridge, plugin, "src/index.mts");
+
+            JsonNode result = bridge.callTool("scale", objectMapper.createObjectNode().put("n", 21));
+            assertThat(result.path("doubled").asInt()).isEqualTo(42);
+            assertThat(result.path("tripled").asInt()).isEqualTo(63);
+        }
+    }
+
+    // Spiegel-Test 954 — ESM-Channel-Plugin lädt über openclaw-plugin/channel und empfängt Nachrichten.
+    @Test
+    @EnabledIf("nodeAvailable")
+    void esmChannelPluginViaOpenclawPluginChannel() throws IOException {
+        Path plugin = Files.createDirectories(tempDir.resolve("esmchan"));
+        write(plugin, "src/channel.mts", """
+                import { defineChannelPluginEntry } from "openclaw-plugin/channel";
+                export default defineChannelPluginEntry({
+                  id: 'acme/esmchan',
+                  name: 'ESM Channel',
+                  register(api) {
+                    api.registerChannel({
+                      name: 'events',
+                      description: 'Ereignisse empfangen.',
+                      receive(message) { return { got: (message.text || '') + '!' }; }
+                    });
+                  }
+                });
+                """);
+
+        try (NodeSidecarBridge bridge = bridge()) {
+            JsonNode receipt = loadBundle(bridge, plugin, "src/channel.mts");
+            assertThat(receipt.path("channels").get(0).path("name").asString()).isEqualTo("events");
+
+            JsonNode delivered = bridge.deliverChannelMessage("events",
+                    objectMapper.createObjectNode().put("text", "knock"));
+            assertThat(delivered.path("got").asString()).isEqualTo("knock!");
+        }
+    }
+
+    // Spiegel-Test 955 — .mjs-Entry (reines JS-ESM) mit Default-Export-Helper.
+    @Test
+    @EnabledIf("nodeAvailable")
+    void mjsEntryWithEsmDefaultExportHelper() throws IOException {
+        Path plugin = Files.createDirectories(tempDir.resolve("mjsmod"));
+        write(plugin, "src/index.mjs", """
+                import { definePluginEntry } from "openclaw/plugin-sdk/plugin-entry";
+                import bang from './bang.mjs';
+                export default definePluginEntry({
+                  id: 'acme/mjsmod',
+                  name: 'MJS Module',
+                  register(api) {
+                    api.registerTool({
+                      name: 'boom',
+                      description: 'Hängt Ausrufezeichen an.',
+                      execute(args) { return { out: bang(args.text) }; }
+                    });
+                  }
+                });
+                """);
+        write(plugin, "src/bang.mjs", "export default (v) => (v || '') + '!';");
+
+        try (NodeSidecarBridge bridge = bridge()) {
+            loadBundle(bridge, plugin, "src/index.mjs");
+
+            assertThat(bridge.callTool("boom", objectMapper.createObjectNode().put("text", "ok"))
+                    .path("out").asString()).isEqualTo("ok!");
+        }
+    }
+
+    // Spiegel-Test 956 — CommonJS-Bundles dürfen die SDK-Boundary direkt per require nutzen.
+    @Test
+    @EnabledIf("nodeAvailable")
+    void commonJsEntryRequiresSdkBoundary() throws IOException {
+        Path plugin = Files.createDirectories(tempDir.resolve("cjs-sdk"));
+        write(plugin, "src/index.js", """
+                const { definePluginEntry } = require('openclaw/plugin-sdk');
+                module.exports = definePluginEntry({
+                  id: 'acme/cjssdk',
+                  name: 'CJS SDK',
+                  register(api) {
+                    api.registerTool({
+                      name: 'lower',
+                      description: 'Klein.',
+                      execute(args) { return { out: String(args.text || '').toLowerCase() }; }
+                    });
+                  }
+                });
+                """);
+
+        try (NodeSidecarBridge bridge = bridge()) {
+            loadBundle(bridge, plugin, "src/index.js");
+
+            assertThat(bridge.callTool("lower", objectMapper.createObjectNode().put("text", "RUF"))
+                    .path("out").asString()).isEqualTo("ruf");
+        }
+    }
+
+    // Spiegel-Test 957 — ESM-Re-Export-Formen (export * / export { x } from) in Helpers.
+    @Test
+    @EnabledIf("nodeAvailable")
+    void mtsHelperSupportsExportStarAndNamedReexport() throws IOException {
+        Path plugin = Files.createDirectories(tempDir.resolve("rexport"));
+        write(plugin, "src/index.mts", """
+                import { upper, lower, lowerAlias } from './combined.mts';
+                export default definePluginEntry({
+                  id: 'acme/rexport',
+                  name: 'Re-Export',
+                  register(api) {
+                    api.registerTool({
+                      name: 'case',
+                      description: 'Groß und klein.',
+                      execute(args) {
+                        const t = String(args.text);
+                        return { out: upper(t) + ' ' + lower(t) + ' ' + lowerAlias(t) };
+                      }
+                    });
+                  }
+                });
+                """);
+        write(plugin, "src/upper.mts", "export const upper = (s) => String(s).toUpperCase();");
+        write(plugin, "src/lower.mts", "export const lower = (s) => String(s).toLowerCase();");
+        write(plugin, "src/combined.mts", """
+                export * from './upper.mts';
+                export { lower, lower as lowerAlias } from './lower.mts';
+                """);
+
+        try (NodeSidecarBridge bridge = bridge()) {
+            loadBundle(bridge, plugin, "src/index.mts");
+
+            assertThat(bridge.callTool("case", objectMapper.createObjectNode().put("text", "aBc"))
+                    .path("out").asString()).isEqualTo("ABC abc abc");
+        }
+    }
+
+    // Spiegel-Test 958 — Type-only Import + getypte Funktion in einem .mts-Bundle (Stripping vor Transform).
+    @Test
+    @EnabledIf("nodeAvailable")
+    void mtsEntryWithTypeOnlyImportAndTypedFunction() throws IOException {
+        Path plugin = Files.createDirectories(tempDir.resolve("generic"));
+        write(plugin, "src/index.mts", """
+                import { definePluginEntry } from "openclaw/plugin-sdk/plugin-entry";
+                import type { Opts } from './opts.mts';
+                function calc(o: Opts): number { return o.n * 2; }
+                export default definePluginEntry({
+                  id: 'acme/generic',
+                  name: 'Generic',
+                  register(api) {
+                    api.registerTool({
+                      name: 'gcalc',
+                      description: 'Rechnet verdoppelt.',
+                      execute(args) { return { result: calc(args) }; }
+                    });
+                  }
+                });
+                """);
+        write(plugin, "src/opts.mts", "export interface Opts { n: number; }");
+
+        try (NodeSidecarBridge bridge = bridge()) {
+            loadBundle(bridge, plugin, "src/index.mts");
+
+            assertThat(bridge.callTool("gcalc", objectMapper.createObjectNode().put("n", 21))
+                    .path("result").asInt()).isEqualTo(42);
+        }
+    }
+
+    // Spiegel-Test 959 — .js-Dateien unter package.json "type":"module" werden als ESM geladen.
+    @Test
+    @EnabledIf("nodeAvailable")
+    void plainJsEsmModuleUnderTypeModulePackageJson() throws IOException {
+        Path plugin = Files.createDirectories(tempDir.resolve("js-esm"));
+        write(plugin, "package.json", "{\"type\":\"module\"}");
+        write(plugin, "src/index.js", """
+                import { definePluginEntry } from "openclaw/plugin-sdk/plugin-entry";
+                import { bang } from './bang.js';
+                export default definePluginEntry({
+                  id: 'acme/jsesm',
+                  name: 'JS ESM',
+                  register(api) {
+                    api.registerTool({
+                      name: 'gotcha',
+                      description: 'Hängt ein Ausrufezeichen an.',
+                      execute(args) { return { out: bang(args.text) }; }
+                    });
+                  }
+                });
+                """);
+        write(plugin, "src/bang.js", "export const bang = (v) => (v || '') + '!';");
+
+        try (NodeSidecarBridge bridge = bridge()) {
+            loadBundle(bridge, plugin, "src/index.js");
+
+            assertThat(bridge.callTool("gotcha", objectMapper.createObjectNode().put("text", "hey"))
+                    .path("out").asString()).isEqualTo("hey!");
+        }
+    }
+
+    // Spiegel-Test 960 — import.meta bleibt nativer (im CJS-Kompilat unzulässiger) Syntax → ERROR_PLUGIN_INVALID.
+    @Test
+    @EnabledIf("nodeAvailable")
+    void esmImportMetaIsRefusedInBundleMode() throws IOException {
+        Path plugin = Files.createDirectories(tempDir.resolve("imeta"));
+        write(plugin, "src/index.mjs", """
+                export const url = import.meta.url;
+                export default definePluginEntry({ id: 'acme/imeta', name: 'Meta', register() {} });
+                """);
+
+        try (NodeSidecarBridge bridge = bridge()) {
+            assertThatThrownBy(() -> loadBundle(bridge, plugin, "src/index.mjs"))
+                    .isInstanceOf(SidecarCallException.class)
+                    .satisfies(e -> assertThat(((SidecarCallException) e).code())
+                            .isEqualTo(NodeSidecarBridge.ERROR_PLUGIN_INVALID));
+        }
+    }
+
+    // Spiegel-Test 961 — ESM-Eintrag ohne abschließende Semikola (ASI-robustes Import-Ende, export default bis EOF).
+    @Test
+    @EnabledIf("nodeAvailable")
+    void esmEntryWithoutTrailingSemicolonsLoads() throws IOException {
+        Path plugin = Files.createDirectories(tempDir.resolve("nosemi"));
+        write(plugin, "src/index.mts", """
+                import { definePluginEntry } from 'openclaw/plugin-sdk/plugin-entry'
+                export default definePluginEntry({
+                  id: 'acme/nosemi',
+                  name: 'No Semicolon',
+                  register(api) {
+                    api.registerTool({
+                      name: 'warn',
+                      description: 'Hängt ein Warn-Zeichen an.',
+                      execute(args) { return { out: String(args.text || '') + '!' }; }
+                    });
+                  }
+                })
+                """);
+
+        try (NodeSidecarBridge bridge = bridge()) {
+            JsonNode receipt = loadBundle(bridge, plugin, "src/index.mts");
+            assertThat(receipt.path("name").asString()).isEqualTo("No Semicolon");
+
+            assertThat(bridge.callTool("warn", objectMapper.createObjectNode().put("text", "Achtung"))
+                    .path("out").asString()).isEqualTo("Achtung!");
         }
     }
 

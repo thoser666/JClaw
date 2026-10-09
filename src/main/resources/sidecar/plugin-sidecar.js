@@ -11,7 +11,11 @@
 // reale Datei innerhalb des Plugin-Ordners geladen und kompiliert — mit hermetischem
 // require-Scope (relative Module, <baseDir>/node_modules, Node-Builtins; alles, was
 // den Plugin-Ordner verlässt, ist abgewiesen) und TypeScript-Type-Stripping
-// (.ts/.mts/.cts, erasable Syntax, Node >= 22.6). Beispiel (CommonJS):
+// (.ts/.mts/.cts, erasable Syntax, Node >= 22.6). Zusätzlich laufen ESM-Dateien
+// (.mjs/.mts sowie .js/.ts unter package.json "type": "module") über einen
+// deterministischen ESM-nach-CommonJS-Transform; die SDK-Bare-Specifier
+// openclaw/plugin-sdk(,/plugin-entry) und openclaw-plugin(,/channel) werden als
+// Laufzeit-Boundary bereitgestellt (nie über node_modules aufgelöst). Beispiel (CommonJS):
 //
 //   module.exports = definePluginEntry({
 //     id: 'my-plugin',
@@ -303,12 +307,18 @@ function evaluateEntry(id, source) {
 // jede Auflösung, die den Plugin-Ordner verlässt (absolute Pfade, `..`-Aufstieg),
 // scheitert mit ERROR_PLUGIN_INVALID. TypeScript-Entries (.ts/.mts/.cts) laufen über das
 // native Type-Stripping des Node-CJS-Loaders (Node >= 22.6; nur erasable Syntax — kein
-// export=, enum oder namespace). Der Modul-Cache ist pro plugin.load frisch, sodass ein
+// export=, enum oder namespace). ESM-Dateien werden vor dem Compile deterministisch nach
+// CommonJS übersetzt (siehe Abschnitt "ESM-Module"); SDK-Subpath-Imports lösen über die
+// Laufzeit-Boundary auf. Der Modul-Cache ist pro plugin.load frisch, sodass ein
 // Hot-Reload (erneutes plugin.load mit derselben id) die Registrierungen neu aufbaut.
 
 const MODULE_EXTENSIONS = ['.js', '.cjs', '.mjs', '.ts', '.mts', '.cts', '.json'];
 const TYPE_SCRIPT_EXTENSIONS = ['.ts', '.mts', '.cts'];
-const PROLOGUE = 'const definePluginEntry=(entry)=>entry;const defineChannelPluginEntry=(entry)=>entry;';
+// Ehemaliger lexikalischer PROLOGUE (const definePluginEntry=...) entfernt: ein Eintrag, der
+// die SDK-Helfer per 'const { definePluginEntry } = require("openclaw/plugin-sdk")' bezieht,
+// kollidierte mit der Wrapper-Deklaration ("Identifier has already been declared"). Die Helfer
+// sind jetzt globale Eigenschaften (gesetzt in createModuleLoader): sichtbar für CommonJS-Dateien
+// ohne import, aber durch eigene Deklarationen überschattbar.
 
 function isTypeScriptFile(file) {
   return TYPE_SCRIPT_EXTENSIONS.some((ext) => file.endsWith(ext));
@@ -404,6 +414,470 @@ function stripTypeScript(filename, source) {
   }
 }
 
+// ---- ESM-Module (P4-01 Folgearbeit) ------------------------------------------------
+//
+// Echte OpenClaw-Bundles werden als ESM-TypeScript ausgeliefert und importieren das SDK
+// per Subpath:
+//
+//   import { definePluginEntry } from "openclaw/plugin-sdk/plugin-entry";
+//   export default definePluginEntry({ ... });
+//
+// Der Sidecar übersetzt solche Dateien deterministisch nach CommonJS (bevor m._compile
+// sie ausführt), damit der hermetische require-Scope greifen kann:
+//   - Die Modul-Format-Erkennung folgt der Node-Semantik: .mjs/.mts = ESM, .cjs/.cts =
+//     CommonJS, .js/.ts = Typ des nächsten package.json (Default CommonJS ohne type).
+//   - import/export-Anweisungen auf Top-Level werden auf require/exports umgeschrieben;
+//     String-, Template-, Kommentar- und RegExp-Literale bleiben unberührt. Die
+//     import-Erkennung endet am Modul-Specifier (ASI-robust), eine abschließende
+//     export default funktioniert auch ohne Semikolon.
+//   - Die Bare-Specifier openclaw/plugin-sdk (und openclaw/plugin-sdk/plugin-entry) sowie
+//     openclaw-plugin (und openclaw-plugin/channel) sind die SDK-Boundary der Laufzeit:
+//     sie werden NIEMALS über node_modules aufgelöst, sondern vom Sidecar als schmaler
+//     Shim bereitgestellt (definePluginEntry/defineChannelPluginEntry) — analog zu
+//     OpenClaw, die das SDK zur Laufzeit injiziert statt es zu installieren.
+//   - Nicht umgeschriebene ESM-Features bleiben nativer Syntax: dynamisches import(...)
+//     ist in CommonJS erlaubt; import.meta erzeugt (gewollt) einen Syntaxfehler
+//     (ERROR_PLUGIN_INVALID). 'export default' ersetzt module.exports — gemischte
+//     Default- + Named-Exports in derselben Datei sind nicht unterstützt (CommonJS-Grenze),
+//     und ESM-Dateien importieren die SDK-Helfer explizit (CommonJS-Dateien finden sie als
+//     globale Eigenschaften der Laufzeit).
+
+function isSdkSpecifier(request) {
+  return request === 'openclaw/plugin-sdk'
+      || request === 'openclaw/plugin-sdk/plugin-entry'
+      || request === 'openclaw-plugin'
+      || request === 'openclaw-plugin/channel';
+}
+
+// start steht auf einem ' oder "-Literal; Index nach dem schließenden Zeichen (\\-Escapes).
+function skipQuotedString(source, start) {
+  const quote = source[start];
+  let i = start + 1;
+  while (i < source.length) {
+    if (source[i] === '\\') {
+      i += 2;
+      continue;
+    }
+    if (source[i] === quote) {
+      return i + 1;
+    }
+    i++;
+  }
+  return source.length;
+}
+
+// start steht auf einem `; ${...}-Platzhalter mit geschachtelten Klammern werden übersprungen.
+function skipTemplateLiteral(source, start) {
+  let i = start + 1;
+  let depth = 0;
+  while (i < source.length) {
+    const c = source[i];
+    if (c === '\\') {
+      i += 2;
+      continue;
+    }
+    if (c === '`') {
+      if (depth === 0) {
+        return i + 1;
+      }
+      i++;
+      continue;
+    }
+    if (c === '$' && source[i + 1] === '{') {
+      depth++;
+      i += 2;
+      continue;
+    }
+    if (c === '}' && depth > 0) {
+      depth--;
+      i++;
+      continue;
+    }
+    i++;
+  }
+  return source.length;
+}
+
+function skipLineComment(source, start) {
+  let i = start + 2;
+  while (i < source.length && source[i] !== '\n') {
+    i++;
+  }
+  return i;
+}
+
+function skipBlockComment(source, start) {
+  const end = source.indexOf('*/', start + 2);
+  return end < 0 ? source.length : end + 2;
+}
+
+// start steht auf dem öffnenden '/'; Zeichenklassen [...] zählen nicht als Abschluss.
+function skipRegExpLiteral(source, start) {
+  let i = start + 1;
+  let inClass = false;
+  while (i < source.length) {
+    const c = source[i];
+    if (c === '\\') {
+      i += 2;
+      continue;
+    }
+    if (c === '[') {
+      inClass = true;
+      i++;
+      continue;
+    }
+    if (c === ']') {
+      inClass = false;
+      i++;
+      continue;
+    }
+    if (c === '/' && !inClass) {
+      return i + 1;
+    }
+    i++;
+  }
+  return source.length;
+}
+
+// Schlüsselwort-Treffer mit Wortgrenze auf beiden Seiten (schlägt nie bei imports/import.meta usw. an).
+function keywordAt(source, index, keyword) {
+  if (!source.startsWith(keyword, index)) {
+    return false;
+  }
+  const before = index === 0 ? '' : source[index - 1];
+  const after = source[index + keyword.length];
+  return !/[A-Za-z0-9_$]/.test(before)
+      && after !== undefined && !/[A-Za-z0-9_$]/.test(after);
+}
+
+// Heuristik, ob an dieser Stelle ein '/' einen RegExp einleitet (statt Division).
+function canStartRegExp(prev) {
+  if (prev === null) {
+    return true;
+  }
+  return !/[A-Za-z0-9_$)\]'"`]/.test(prev);
+}
+
+// Liest ab `start` (Schlüsselwort-Start) eine vollständige import/export-Anweisung ein.
+// Ende: ';' in Tiefe 0, für export default-Funktionen/-Klassen ohne Semikolon die
+// schließende Klammer des Rumpfs, für import der Modul-Specifier (ASI-robust).
+function readEsmStatement(source, start) {
+  const n = source.length;
+  const isImport = source.startsWith('import', start);
+  const endAtBrace = !isImport
+      && /^export\s+(default\s+)?((async\s+)?function\b|class\b)/.test(source.slice(start, Math.min(n, start + 80)));
+  let i = start;
+  let depth = 0;
+  while (i < n) {
+    const c = source[i];
+    if (c === "'" || c === '"') {
+      const end = skipQuotedString(source, i);
+      if (isImport && depth === 0) {
+        return { text: source.slice(start, end), end };
+      }
+      i = end;
+      continue;
+    }
+    if (c === '`') {
+      i = skipTemplateLiteral(source, i);
+      continue;
+    }
+    if (c === '/' && source[i + 1] === '/') {
+      i = skipLineComment(source, i);
+      continue;
+    }
+    if (c === '/' && source[i + 1] === '*') {
+      i = skipBlockComment(source, i);
+      continue;
+    }
+    if (c === '(') {
+      depth++;
+      i++;
+      continue;
+    }
+    if (c === '[') {
+      depth++;
+      i++;
+      continue;
+    }
+    if (c === '{') {
+      depth++;
+      i++;
+      continue;
+    }
+    if (c === ')') {
+      depth--;
+      i++;
+      continue;
+    }
+    if (c === ']') {
+      depth--;
+      i++;
+      continue;
+    }
+    if (c === '}') {
+      depth--;
+      if (endAtBrace && depth === 0) {
+        return { text: source.slice(start, i + 1), end: i + 1 };
+      }
+      i++;
+      continue;
+    }
+    if (c === ';' && depth === 0) {
+      return { text: source.slice(start, i + 1), end: i + 1 };
+    }
+    i++;
+  }
+  return { text: source.slice(start, n), end: n };
+}
+
+// Zerlegt ein 'a, b as c'-Specifier-Feld in Teile (Tiefe-beachtet) und liefert sie getrimmt.
+function splitTopLevelSpecifiers(specs) {
+  const parts = [];
+  let depth = 0;
+  let segStart = 0;
+  for (let i = 0; i < specs.length; i++) {
+    const c = specs[i];
+    if (c === '{' || c === '(' || c === '[') {
+      depth++;
+    } else if (c === '}' || c === ')' || c === ']') {
+      depth--;
+    } else if (c === ',' && depth === 0) {
+      parts.push(specs.slice(segStart, i));
+      segStart = i + 1;
+    }
+  }
+  parts.push(specs.slice(segStart));
+  return parts;
+}
+
+function specifierDestructure(specs) {
+  return splitTopLevelSpecifiers(specs).map((s) => {
+    const part = s.trim();
+    const as = /\s+as\s+/.exec(part);
+    return as
+        ? part.slice(0, as.index).trim() + ': ' + part.slice(as.index + as[0].length).trim()
+        : part;
+  }).join(', ');
+}
+
+// 'export const|let|var ...' -> Deklaration + exports-Zuweisungen (nur einfache Identifier).
+function rewriteExportDeclarations(kind, decl) {
+  const body = decl.replace(/;\s*$/, '');
+  const names = [];
+  let depth = 0;
+  let segStart = 0;
+  const parts = [];
+  for (let i = 0; i < body.length; i++) {
+    const c = body[i];
+    if (c === '{' || c === '(' || c === '[') {
+      depth++;
+    } else if (c === '}' || c === ')' || c === ']') {
+      depth--;
+    } else if (c === ',' && depth === 0) {
+      parts.push(body.slice(segStart, i));
+      segStart = i + 1;
+    }
+  }
+  parts.push(body.slice(segStart));
+  for (const part of parts) {
+    const p = part.trim();
+    const eq = p.indexOf('=');
+    const head = (eq >= 0 ? p.slice(0, eq) : p).trim();
+    if (/^[A-Za-z_$][\w$]*$/.test(head)) {
+      names.push(head);
+    }
+  }
+  return kind + ' ' + body + ';'
+      + names.map((name) => '\nexports.' + name + ' = ' + name + ';').join('');
+}
+
+function rewriteImport(t) {
+  let m;
+  m = /^import\s*['"]([^'"]+)['"]\s*;?$/.exec(t);
+  if (m) {
+    return 'require(' + JSON.stringify(m[1]) + ');';
+  }
+  m = /^import\s+type\b/.exec(t);
+  if (m) {
+    return '';
+  }
+  m = /^import\s*(\w+)\s*,\s*\*\s*as\s+(\w+)\s+from\s*['"]([^'"]+)['"]\s*;?$/.exec(t);
+  if (m) {
+    const mod = JSON.stringify(m[3]);
+    return 'const ' + m[1] + ' = require(' + mod + ');\nconst ' + m[2] + ' = require(' + mod + ');';
+  }
+  m = /^import\s*(\w+)\s*,\s*\{([\s\S]*?)\}\s*from\s*['"]([^'"]+)['"]\s*;?$/.exec(t);
+  if (m) {
+    const mod = JSON.stringify(m[3]);
+    return 'const ' + m[1] + ' = require(' + mod + ');\nconst { ' + specifierDestructure(m[2]) + ' } = require(' + mod + ');';
+  }
+  m = /^import\s*\*\s*as\s+(\w+)\s+from\s*['"]([^'"]+)['"]\s*;?$/.exec(t);
+  if (m) {
+    return 'const ' + m[1] + ' = require(' + JSON.stringify(m[2]) + ');';
+  }
+  m = /^import\s*\{([\s\S]*?)\}\s*from\s*['"]([^'"]+)['"]\s*;?$/.exec(t);
+  if (m) {
+    return 'const { ' + specifierDestructure(m[1]) + ' } = require(' + JSON.stringify(m[2]) + ');';
+  }
+  m = /^import\s*(\w+)\s+from\s*['"]([^'"]+)['"]\s*;?$/.exec(t);
+  if (m) {
+    return 'const ' + m[1] + ' = require(' + JSON.stringify(m[2]) + ');';
+  }
+  // Nicht unterstütztes import-Formular: nativer Syntaxfehler beim Compile ist gewollt.
+  return t;
+}
+
+function rewriteExport(t) {
+  let m;
+  m = /^export\s+default\s+([\s\S]*)$/.exec(t);
+  if (m) {
+    return 'module.exports = ' + m[1] + ';';
+  }
+  m = /^export\s+(const|let|var)\s+([\s\S]+)$/.exec(t);
+  if (m) {
+    return rewriteExportDeclarations(m[1], m[2]);
+  }
+  m = /^export\s+(async\s+)?(function\b[\s\S]*)$/.exec(t);
+  if (m) {
+    const body = (m[1] || '') + m[2];
+    const fnName = /\bfunction\b\s*([A-Za-z_$][\w$]*)/.exec(m[2]);
+    return body + (fnName ? '\nexports.' + fnName[1] + ' = ' + fnName[1] + ';' : '');
+  }
+  m = /^export\s+(class\b[\s\S]*)$/.exec(t);
+  if (m) {
+    const clsName = /\bclass\s*([A-Za-z_$][\w$]*)/.exec(m[1]);
+    return m[1] + (clsName ? '\nexports.' + clsName[1] + ' = ' + clsName[1] + ';' : '');
+  }
+  m = /^export\s*\*\s*as\s+(\w+)\s+from\s*['"]([^'"]+)['"]\s*;?$/.exec(t);
+  if (m) {
+    return 'exports.' + m[1] + ' = require(' + JSON.stringify(m[2]) + ');';
+  }
+  m = /^export\s*\{([\s\S]*?)\}\s*from\s*['"]([^'"]+)['"]\s*;?$/.exec(t);
+  if (m) {
+    const mod = 'require(' + JSON.stringify(m[2]) + ')';
+    // Block-Scope, damit mehrere Re-Exports in derselben Datei nicht um __mod konkurrieren.
+    return '{ const __mod = ' + mod + ';\n'
+        + splitTopLevelSpecifiers(m[1]).map((s) => {
+          const part = s.trim();
+          const as = /\s+as\s+/.exec(part);
+          const from = as ? part.slice(0, as.index).trim() : part;
+          const to = as ? part.slice(as.index + as[0].length).trim() : part;
+          // 'default' ist über scopedRequire bereits entwaffnet (esmodule-Interop).
+          const value = from === 'default' ? '__mod' : '__mod.' + from;
+          return 'exports.' + to + ' = ' + value + ';';
+        }).join('\n') + ' }';
+  }
+  m = /^export\s*\*\s*from\s*['"]([^'"]+)['"]\s*;?$/.exec(t);
+  if (m) {
+    return '{ const __mod = require(' + JSON.stringify(m[1]) + ');'
+        + '\nfor (const __k of Object.keys(__mod)) { if (__k !== "default") { exports[__k] = __mod[__k]; } } }';
+  }
+  m = /^export\s*\{([\s\S]*?)\}\s*;?\s*$/.exec(t);
+  if (m) {
+    return splitTopLevelSpecifiers(m[1]).map((s) => {
+      const part = s.trim();
+      const as = /\s+as\s+/.exec(part);
+      const from = as ? part.slice(0, as.index).trim() : part;
+      const to = as ? part.slice(as.index + as[0].length).trim() : part;
+      return 'exports.' + to + ' = ' + from + ';';
+    }).join('\n');
+  }
+  // z. B. export type ... (nach Type-Stripping normalerweise bereits entfernt) oder
+  // nicht unterstützte Formen: nativer Syntaxfehler beim Compile ist gewollt.
+  return t;
+}
+
+function rewriteEsmStatement(text) {
+  const t = text.trim();
+  if (t.startsWith('import')) {
+    if (t.length > 6 && (t[6] === '(' || t[6] === '.')) {
+      return text; // dynamisches import(...) / import.meta: nicht umschreiben
+    }
+    return rewriteImport(t);
+  }
+  if (t.startsWith('export')) {
+    return rewriteExport(t);
+  }
+  return text;
+}
+
+function convertEsmToCjs(filename, source) {
+  const n = source.length;
+  let out = '';
+  let i = 0;
+  let depth = 0;
+  let lastSig = null;
+  while (i < n) {
+    const c = source[i];
+    if (c === "'" || c === '"') {
+      const end = skipQuotedString(source, i);
+      out += source.slice(i, end);
+      i = end;
+      lastSig = '"';
+      continue;
+    }
+    if (c === '`') {
+      const end = skipTemplateLiteral(source, i);
+      out += source.slice(i, end);
+      i = end;
+      lastSig = '`';
+      continue;
+    }
+    if (c === '/' && source[i + 1] === '/') {
+      const end = skipLineComment(source, i);
+      out += source.slice(i, end);
+      i = end;
+      continue;
+    }
+    if (c === '/' && source[i + 1] === '*') {
+      const end = skipBlockComment(source, i);
+      out += source.slice(i, end);
+      i = end;
+      continue;
+    }
+    if (c === '/' && canStartRegExp(lastSig)) {
+      const end = skipRegExpLiteral(source, i);
+      out += source.slice(i, end);
+      i = end;
+      lastSig = '/';
+      continue;
+    }
+    if (c === '(' || c === '[' || c === '{') {
+      depth++;
+      out += c;
+      lastSig = c;
+      i++;
+      continue;
+    }
+    if (c === ')' || c === ']' || c === '}') {
+      depth = Math.max(0, depth - 1);
+      out += c;
+      lastSig = c;
+      i++;
+      continue;
+    }
+    if (depth === 0 && keywordAt(source, i, 'import')) {
+      const stmt = readEsmStatement(source, i);
+      out += rewriteEsmStatement(stmt.text);
+      i = stmt.end;
+      continue;
+    }
+    if (depth === 0 && keywordAt(source, i, 'export')) {
+      const stmt = readEsmStatement(source, i);
+      out += rewriteEsmStatement(stmt.text);
+      i = stmt.end;
+      continue;
+    }
+    out += c;
+    if (c !== ' ' && c !== '\t' && c !== '\n' && c !== '\r') {
+      lastSig = c;
+    }
+    i++;
+  }
+  return out;
+}
+
 /**
  * Erzeugt den hermetischen Modul-Loader eines Plugin-Bundles.
  * Liefert { evaluateModule(file), resolveRequest(request) }; der Modul-Cache ist pro
@@ -411,11 +885,75 @@ function stripTypeScript(filename, source) {
  */
 function createModuleLoader(pluginId, baseDir) {
   const base = path.resolve(baseDir);
-  const cache = new Map();
+  const cache = new Map();               // Datei -> Modul (pro Load frisch)
+  const dirCache = new Map();            // Verzeichnis -> package.json-type (Erkennung)
+  // SDK-Boundary: schmaler Shim, der die OpenClaw-Entry-Helfer bereitstellt. Wird für die
+  // Bare-Specifier openclaw/plugin-sdk(, /plugin-entry) und openclaw-plugin(, /channel)
+  // zurückgegeben; nie über node_modules aufgelöst (siehe §ESM-Module).
+  const sdkModule = {
+    filename: '<openclaw-sdk>',
+    exports: {
+      definePluginEntry: (entry) => entry,
+      defineChannelPluginEntry: (entry) => entry
+    }
+  };
+  // Als globale Eigenschaften sichtbar (keine lexikalischen Wrapper-Deklarationen), damit
+  // CommonJS-Dateien die Helfer auch ohne import nutzen können, während ein eigener
+  // 'const { definePluginEntry } = require("openclaw/plugin-sdk")' sie sauber überschattet.
+  globalThis.definePluginEntry = sdkModule.exports.definePluginEntry;
+  globalThis.defineChannelPluginEntry = sdkModule.exports.defineChannelPluginEntry;
+
+  // Modul-Format-Erkennung nach Node-Semantik (nächstes package.json "type" entscheidet
+  // für .js/.ts; .mjs/.mts = ESM, .cjs/.cts = CommonJS).
+  function packageJsonType(dir) {
+    if (!dirCache.has(dir)) {
+      let type = 'none';
+      const pkg = path.join(dir, 'package.json');
+      if (statIs(pkg, 'file')) {
+        try {
+          type = JSON.parse(fs.readFileSync(pkg, 'utf8')).type === 'module' ? 'module' : 'commonjs';
+        } catch {
+          type = 'commonjs';
+        }
+      }
+      dirCache.set(dir, type);
+    }
+    return dirCache.get(dir);
+  }
+
+  function moduleFormat(filename) {
+    if (filename.endsWith('.mjs') || filename.endsWith('.mts')) {
+      return 'esm';
+    }
+    if (filename.endsWith('.cjs') || filename.endsWith('.cts')) {
+      return 'commonjs';
+    }
+    let dir = path.dirname(filename);
+    while (true) {
+      const type = packageJsonType(dir);
+      if (type === 'module') {
+        return 'esm';
+      }
+      if (type !== 'none') {
+        return 'commonjs';
+      }
+      if (dir === base) {
+        return 'commonjs';
+      }
+      const parent = path.dirname(dir);
+      if (parent === dir || !isInside(base, parent)) {
+        return 'commonjs';
+      }
+      dir = parent;
+    }
+  }
 
   function resolveRequest(request, fromFile) {
     if (isBuiltin(request)) {
       return request;
+    }
+    if (isSdkSpecifier(request)) {
+      return sdkModule;
     }
     const fromDir = fromFile ? path.dirname(path.resolve(fromFile)) : base;
     if (request.startsWith('.') || path.isAbsolute(request)) {
@@ -461,7 +999,13 @@ function createModuleLoader(pluginId, baseDir) {
     if (isTypeScriptFile(filename)) {
       code = stripTypeScript(filename, source);
     }
-    m._compile(PROLOGUE + '\n' + code, filename);
+    const esm = moduleFormat(filename) === 'esm';
+    if (esm) {
+      code = convertEsmToCjs(filename, code);
+    }
+    // ESM-Dateien importieren die SDK-Helfer selbst; CommonJS-Dateien finden sie als globale
+    // Eigenschaften (siehe createModuleLoader). Eine doppelte Deklaration wäre ein Syntaxfehler.
+    m._compile('\n' + code, filename);
     return m;
   }
 
@@ -487,6 +1031,9 @@ function createModuleLoader(pluginId, baseDir) {
   function scopedRequire(request) {
     const fromFile = this && this.filename ? this.filename : base;
     const resolved = resolveRequest(request, fromFile);
+    if (resolved === sdkModule) {
+      return sdkModule.exports; // SDK-Boundary: von der Laufzeit bereitgestellt
+    }
     if (resolved === request) {
       // Node-Builtin (z. B. 'fs', 'path'): über den ursprünglichen Module.require laden
       return Module.prototype.require.call(this && this instanceof Module ? this : module, resolved);
@@ -498,6 +1045,9 @@ function createModuleLoader(pluginId, baseDir) {
   }
   scopedRequire.resolve = (request) => {
     const resolved = resolveRequest(request, base);
+    if (resolved === sdkModule) {
+      return request;
+    }
     return resolved === request ? resolved : assertInside(base, resolved, pluginId);
   };
   scopedRequire.resolve.paths = () => [path.join(base, 'node_modules')];
