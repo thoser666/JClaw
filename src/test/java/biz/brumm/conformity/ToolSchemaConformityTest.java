@@ -10,8 +10,11 @@ import org.springframework.boot.test.context.SpringBootTest;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
+import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import static java.util.stream.Collectors.toSet;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -64,5 +67,35 @@ class ToolSchemaConformityTest {
         assertThat(names)
                 .describedAs("Kern-Tools (Rechnen, Zeit) müssen im Default-Kontext exponiert sein.")
                 .contains("calculate", "getCurrentDateTime");
+    }
+
+    @Test
+    void goalModelToolsAreExposedWithOpenClawContract() throws Exception {
+        Map<String, ToolDefinition> definitions = Arrays.stream(ToolCallbacks.from(agentTools.toArray()))
+                .map(ToolCallback::getToolDefinition)
+                .collect(Collectors.toMap(ToolDefinition::name, definition -> definition));
+
+        assertThat(definitions)
+                .describedAs("Die OpenClaw-Model-Tools get_goal/create_goal/update_goal müssen exponiert sein.")
+                .containsKeys("get_goal", "create_goal", "update_goal");
+
+        JsonNode get = MAPPER.readTree(definitions.get("get_goal").inputSchema());
+        assertThat(get.path("properties").path("sessionId").isMissingNode()).isFalse();
+
+        JsonNode create = MAPPER.readTree(definitions.get("create_goal").inputSchema());
+        assertThat(create.path("properties").path("objective").isMissingNode()).isFalse();
+        assertThat(create.path("properties").path("token_budget").isMissingNode()).isFalse();
+        assertThat(create.path("required").toString()).contains("\"objective\"");
+        assertThat(create.path("required").toString())
+                .describedAs("token_budget ist optional (OpenClaw: nur create_goal setzt ein Budget).")
+                .doesNotContain("token_budget");
+
+        JsonNode update = MAPPER.readTree(definitions.get("update_goal").inputSchema());
+        assertThat(update.path("properties").path("status").isMissingNode()).isFalse();
+        assertThat(update.path("properties").path("note").isMissingNode()).isFalse();
+        assertThat(update.path("required").toString()).contains("\"status\"");
+        assertThat(update.path("properties").path("status").path("description").asText())
+                .describedAs("update_goal darf nur complete | blocked anbieten.")
+                .contains("complete", "blocked");
     }
 }
