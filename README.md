@@ -639,6 +639,7 @@ Wiederkehrende Agent-Jobs mit Cron-Ausdrücken:
 Dauerhaftes Session-Ziel und persistente Folge-Prompts (OpenClaw 2026.8.x):
 
 * **Goals:** ein Ziel pro Session (`session_goal`-Tabelle, überlebt Gateway-Neustarts), Statusmaschine `active/paused/blocked/budget_limited/usage_limited/complete` (`complete` ist terminal), REST-Spiegel `/api/v1/sessions/{id}/goal` von `/goal start|edit|pause|resume|block|complete|clear`
+* **Model-Tools (OpenClaw-Spiegel):** `get_goal` (Status/Objective/Budget lesen), `create_goal` (nur auf ausdrücklichen Wunsch, optionales positives `token_budget`), `update_goal` (`complete`/`blocked` + optionale Notiz) — Pause/Resume/Clear bleiben Operator-/Session-Controls
 * **Follow-up-Queue:** `follow_up`-Tabelle, enqueue/list/drain explizit — **keine Auto-Ausführung** beim Start (Deny-by-Default); offene Follow-ups werden beim Drain an den Agenten gesendet, Fehler lassen den Eintrag in der Queue
 * **REST-API:** `GET|POST|DELETE /api/v1/sessions/{id}/goal...`, `POST /api/v1/sessions/{id}/follow-ups`, `POST .../follow-ups/drain`
 
