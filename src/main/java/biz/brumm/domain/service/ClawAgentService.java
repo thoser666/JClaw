@@ -57,6 +57,7 @@ public class ClawAgentService implements ExecuteTaskUseCase {
         if (effectiveContextId != null && !effectiveContextId.isBlank()) {
             Session session = sessionService.findSession(effectiveContextId).orElse(null);
             if (session != null && sessionService.shouldReset(session)) {
+                sessionService.clearSessionGoal(effectiveContextId);
                 effectiveContextId = UUID.randomUUID().toString();
                 log.info("Session-Reset: neue Session-ID '{}'.", effectiveContextId);
                 session = null;

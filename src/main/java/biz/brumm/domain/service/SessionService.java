@@ -29,15 +29,17 @@ public class SessionService {
     private final SessionProperties properties;
     private final CredentialLeakGuard credentialLeakGuard;
     private final PluginHookDispatcher pluginHooks;
+    private final GoalService goalService;
 
     public SessionService(SessionStore sessionStore, ConversationStore conversationStore,
                           SessionProperties properties, CredentialLeakGuard credentialLeakGuard,
-                          PluginHookDispatcher pluginHooks) {
+                          PluginHookDispatcher pluginHooks, GoalService goalService) {
         this.sessionStore = sessionStore;
         this.conversationStore = conversationStore;
         this.properties = properties;
         this.credentialLeakGuard = credentialLeakGuard;
         this.pluginHooks = pluginHooks;
+        this.goalService = goalService;
     }
 
     public Optional<Session> findSession(String sessionId) {
@@ -48,6 +50,7 @@ public class SessionService {
     }
 
     public Session createSession(String sessionId) {
+        clearSessionGoal(sessionId);
         Instant now = Instant.now();
         Session session = new Session(sessionId, null, now, now, now);
         Session saved = sessionStore.save(session);
@@ -104,10 +107,22 @@ public class SessionService {
     }
 
     public void deleteSession(String sessionId) {
+        clearSessionGoal(sessionId);
         conversationStore.deleteByContextId(sessionId);
         sessionStore.deleteById(sessionId);
         // session_end (OpenClaw): beobachtet nach dem Entfernen der Session.
         pluginHooks.dispatch("session_end", Map.of("sessionId", sessionId, "reason", "deleted"));
+    }
+
+    /**
+     * Löscht das Session-Ziel (OpenClaw: {@code /new} und {@code /reset} löschen das
+     * aktuelle Session-Ziel, weil sie bewusst frischen Session-Kontext starten).
+     */
+    public void clearSessionGoal(String sessionId) {
+        if (sessionId == null || sessionId.isBlank()) {
+            return;
+        }
+        goalService.clearGoal(sessionId);
     }
 
     private Session sanitize(Session session) {

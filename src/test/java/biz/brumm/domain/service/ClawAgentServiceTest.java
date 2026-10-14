@@ -19,6 +19,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Optional;
 
@@ -46,13 +47,16 @@ class ClawAgentServiceTest {
     @Mock
     private ConversationStore conversationStore;
 
+    @Mock
+    private GoalService goalService;
+
     private final PluginHookDispatcher pluginHooks = PluginHookDispatcher.noop();
 
     private SessionService sessionService() {
         return new SessionService(sessionStore, conversationStore,
                 new SessionProperties("none", 4, 60),
                 new CredentialLeakGuard(new GuardrailProperties(false, List.of(), List.of()), null),
-                pluginHooks);
+                pluginHooks, goalService);
     }
 
     @Test
@@ -173,5 +177,46 @@ class ClawAgentServiceTest {
         AgentResponse result = service.handle(new AgentCommand("Aufgabe", "new-s"));
 
         assertThat(result.sessionId()).isEqualTo("new-s");
+    }
+
+    @Test
+    void handleResetClearsOldSessionGoal() {
+        SessionService resetService = new SessionService(sessionStore, conversationStore,
+                new SessionProperties("daily", 0, 60),
+                new CredentialLeakGuard(new GuardrailProperties(false, List.of(), List.of()), null),
+                pluginHooks, goalService);
+        ClawAgentProperties properties = new ClawAgentProperties(8, 10);
+        ClawAgentService service = new ClawAgentService(aiProviderPort, properties,
+                new SkillProperties("./skills", List.of()), skillProvider, resetService, pluginHooks);
+        Session stale = new Session("old-id", null,
+                Instant.now().minus(2, ChronoUnit.DAYS), Instant.now(), Instant.now());
+        when(sessionStore.findById("old-id")).thenReturn(Optional.of(stale));
+        when(sessionStore.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(skillProvider.findAll()).thenReturn(List.of());
+        when(aiProviderPort.execute(any(AgentCommand.class), any(String.class), eq(8)))
+                .thenReturn(AgentResponse.of("ok"));
+
+        AgentResponse result = service.handle(new AgentCommand("Aufgabe", "old-id"));
+
+        verify(goalService).clearGoal("old-id");
+        assertThat(result.sessionId()).isNotEqualTo("old-id");
+        assertThat(result.sessionId()).isNotBlank();
+    }
+
+    @Test
+    void handleWithoutResetKeepsSessionGoal() {
+        ClawAgentProperties properties = new ClawAgentProperties(8, 10);
+        ClawAgentService service = new ClawAgentService(aiProviderPort, properties,
+                new SkillProperties("./skills", List.of()), skillProvider, sessionService(), pluginHooks);
+        Session existing = new Session("s1", "Titel", Instant.now(), Instant.now(), Instant.now());
+        when(sessionStore.findById("s1")).thenReturn(Optional.of(existing));
+        when(sessionStore.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(skillProvider.findAll()).thenReturn(List.of());
+        when(aiProviderPort.execute(any(AgentCommand.class), any(String.class), eq(8)))
+                .thenReturn(AgentResponse.of("ok"));
+
+        service.handle(new AgentCommand("Aufgabe", "s1"));
+
+        verify(goalService, never()).clearGoal(any());
     }
 }

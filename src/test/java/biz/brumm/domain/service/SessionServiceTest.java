@@ -19,6 +19,7 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -31,6 +32,9 @@ class SessionServiceTest {
     @Mock
     private ConversationStore conversationStore;
 
+    @Mock
+    private GoalService goalService;
+
     private SessionService service;
 
     private final PluginHookDispatcher pluginHooks = PluginHookDispatcher.noop();
@@ -38,7 +42,7 @@ class SessionServiceTest {
     @BeforeEach
     void setUp() {
         service = new SessionService(sessionStore, conversationStore,
-                new SessionProperties("none", 4, 60), guardDisabled(), pluginHooks);
+                new SessionProperties("none", 4, 60), guardDisabled(), pluginHooks, goalService);
     }
 
     private static CredentialLeakGuard guardDisabled() {
@@ -131,7 +135,7 @@ class SessionServiceTest {
     @Test
     void shouldResetReturnsFalseForDailyWhenSameDay() {
         SessionService dailyService = new SessionService(sessionStore, conversationStore,
-                new SessionProperties("daily", 4, 60), guardDisabled(), pluginHooks);
+                new SessionProperties("daily", 4, 60), guardDisabled(), pluginHooks, goalService);
         Session session = new Session("s1", null, Instant.now(), Instant.now(), Instant.now());
 
         assertThat(dailyService.shouldReset(session)).isFalse();
@@ -140,7 +144,7 @@ class SessionServiceTest {
     @Test
     void shouldResetReturnsTrueForDailyWhenOlderThanBoundary() {
         SessionService dailyService = new SessionService(sessionStore, conversationStore,
-                new SessionProperties("daily", 0, 60), guardDisabled(), pluginHooks);
+                new SessionProperties("daily", 0, 60), guardDisabled(), pluginHooks, goalService);
         Instant twoDaysAgo = Instant.now().minus(2, ChronoUnit.DAYS);
         Session session = new Session("s1", null, twoDaysAgo, twoDaysAgo, twoDaysAgo);
 
@@ -150,7 +154,7 @@ class SessionServiceTest {
     @Test
     void shouldResetReturnsTrueForIdleWhenExpired() {
         SessionService idleService = new SessionService(sessionStore, conversationStore,
-                new SessionProperties("idle", 4, 1), guardDisabled(), pluginHooks);
+                new SessionProperties("idle", 4, 1), guardDisabled(), pluginHooks, goalService);
         Instant twoMinutesAgo = Instant.now().minus(2, ChronoUnit.MINUTES);
         Session session = new Session("s1", null, Instant.now(), twoMinutesAgo, twoMinutesAgo);
 
@@ -160,7 +164,7 @@ class SessionServiceTest {
     @Test
     void shouldResetReturnsFalseForIdleWhenNotExpired() {
         SessionService idleService = new SessionService(sessionStore, conversationStore,
-                new SessionProperties("idle", 4, 60), guardDisabled(), pluginHooks);
+                new SessionProperties("idle", 4, 60), guardDisabled(), pluginHooks, goalService);
         Session session = new Session("s1", null, Instant.now(), Instant.now(), Instant.now());
 
         assertThat(idleService.shouldReset(session)).isFalse();
@@ -181,9 +185,39 @@ class SessionServiceTest {
     }
 
     @Test
+    void createSessionClearsStaleGoal() {
+        when(sessionStore.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        service.createSession("new-id");
+
+        verify(goalService).clearGoal("new-id");
+    }
+
+    @Test
+    void deleteSessionClearsGoal() {
+        service.deleteSession("s1");
+
+        verify(goalService).clearGoal("s1");
+    }
+
+    @Test
+    void clearSessionGoalDeletesGoal() {
+        service.clearSessionGoal("s1");
+
+        verify(goalService).clearGoal("s1");
+    }
+
+    @Test
+    void clearSessionGoalIgnoresBlankSessionId() {
+        service.clearSessionGoal("  ");
+
+        verify(goalService, never()).clearGoal(any());
+    }
+
+    @Test
     void touchSessionRedactsKnownSecretFromDisplayName() {
         SessionService guarded = new SessionService(sessionStore, conversationStore,
-                new SessionProperties("none", 4, 60), guardWithSecrets(List.of("TOPSECRET")), pluginHooks);
+                new SessionProperties("none", 4, 60), guardWithSecrets(List.of("TOPSECRET")), pluginHooks, goalService);
         Session existing = new Session("s1", null, Instant.now(), Instant.now(), Instant.now());
         when(sessionStore.findById("s1")).thenReturn(Optional.of(existing));
         when(sessionStore.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
@@ -196,7 +230,7 @@ class SessionServiceTest {
     @Test
     void listSessionsRedactsKnownSecretFromExistingDisplayName() {
         SessionService guarded = new SessionService(sessionStore, conversationStore,
-                new SessionProperties("none", 4, 60), guardWithSecrets(List.of("TOPSECRET")), pluginHooks);
+                new SessionProperties("none", 4, 60), guardWithSecrets(List.of("TOPSECRET")), pluginHooks, goalService);
         Session existing = new Session("s1", "TOPSECRET ist geheim", Instant.now(), Instant.now(), Instant.now());
         when(sessionStore.findAll()).thenReturn(List.of(existing));
 
