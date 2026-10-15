@@ -91,4 +91,64 @@ class ControlUiResourceTest {
         mockMvc.perform(get("/js/gibt-es-nicht.js"))
                 .andExpect(status().isNotFound());
     }
+
+    @Test
+    void indexContainsGoalComposer() throws Exception {
+        mockMvc.perform(get("/index.html"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("data-panel=\"goals\"")))
+                .andExpect(content().string(containsString("id=\"panel-goals\"")))
+                .andExpect(content().string(containsString("id=\"goal-form\"")))
+                .andExpect(content().string(containsString("id=\"goal-session\"")))
+                .andExpect(content().string(containsString("id=\"goal-objective\"")))
+                .andExpect(content().string(containsString("id=\"goal-token-budget\"")))
+                .andExpect(content().string(containsString("id=\"goal-note\"")))
+                .andExpect(content().string(containsString("id=\"goal-status\"")))
+                .andExpect(content().string(containsString("id=\"goal-view\"")));
+    }
+
+    @Test
+    void indexContainsGoalActionButtons() throws Exception {
+        mockMvc.perform(get("/index.html"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("id=\"goal-load\"")))
+                .andExpect(content().string(containsString("id=\"goal-start\"")))
+                .andExpect(content().string(containsString("id=\"goal-edit\"")))
+                .andExpect(content().string(containsString("id=\"goal-pause\"")))
+                .andExpect(content().string(containsString("id=\"goal-resume\"")))
+                .andExpect(content().string(containsString("id=\"goal-block\"")))
+                .andExpect(content().string(containsString("id=\"goal-complete\"")))
+                .andExpect(content().string(containsString("id=\"goal-clear\"")));
+    }
+
+    @Test
+    void scriptContainsGoalComposerEndpoints() throws Exception {
+        mockMvc.perform(get("/js/app.js"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("\"/goal/start\"")))
+                .andExpect(content().string(containsString("\"/goal/edit\"")))
+                .andExpect(content().string(containsString("\"/goal/pause\"")))
+                .andExpect(content().string(containsString("\"/goal/resume\"")))
+                .andExpect(content().string(containsString("\"/goal/block\"")))
+                .andExpect(content().string(containsString("\"/goal/complete\"")))
+                .andExpect(content().string(containsString("method: \"DELETE\"")));
+    }
+
+    @Test
+    void scriptRendersGoalStateAndHandlesMissingGoal() throws Exception {
+        mockMvc.perform(get("/js/app.js"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("function renderGoal")))
+                .andExpect(content().string(containsString("goalBadgeType")))
+                .andExpect(content().string(containsString("HTTP 404")))
+                .andExpect(content().string(containsString("Kein Ziel")))
+                .andExpect(content().string(containsString("Session vorhanden.")));
+    }
+
+    @Test
+    void scriptOffersGoalShortcutOnSessionTiles() throws Exception {
+        mockMvc.perform(get("/js/app.js"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("goalSessionShortcut")));
+    }
 }

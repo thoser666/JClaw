@@ -24,6 +24,9 @@
             <button class="nav-item" type="button" data-panel="sessions">
                 <span class="nav-icon" aria-hidden="true">&#9776;</span> Sessions
             </button>
+            <button class="nav-item" type="button" data-panel="goals">
+                <span class="nav-icon" aria-hidden="true">&#9733;</span> Ziele
+            </button>
             <button class="nav-item" type="button" data-panel="conversations">
                 <span class="nav-icon" aria-hidden="true">&#9776;</span> Konversationen
             </button>
@@ -78,6 +81,47 @@
             </header>
             <div id="sessions-status" class="status" role="status" aria-live="polite"></div>
             <div id="sessions-list" class="grid"></div>
+        </section>
+
+        <section class="panel" id="panel-goals" aria-labelledby="heading-goals" hidden>
+            <header class="panel-header">
+                <h1 id="heading-goals">Ziele</h1>
+                <p class="panel-sub">Session-Ziel starten, umformulieren und steuern (Spiegel von /goal start|edit|pause|resume|block|complete|clear).</p>
+            </header>
+
+            <form id="goal-form" class="card">
+                <div class="field">
+                    <label for="goal-session">Session-ID</label>
+                    <input id="goal-session" type="text" required placeholder="z. B. demo-session" autocomplete="off">
+                </div>
+                <div class="field">
+                    <label for="goal-objective">Objective <span class="hint">(für Start/Edit)</span></label>
+                    <textarea id="goal-objective" rows="3"
+                              placeholder="z. B. Bereite das Release-Protokoll vor"></textarea>
+                </div>
+                <div class="field">
+                    <label for="goal-token-budget">Token-Budget <span class="hint">(optional, nur bei Start)</span></label>
+                    <input id="goal-token-budget" type="number" min="1" step="1" placeholder="z. B. 50000" autocomplete="off">
+                </div>
+                <div class="field">
+                    <label for="goal-note">Notiz <span class="hint">(optional, für Statuswechsel)</span></label>
+                    <input id="goal-note" type="text" placeholder="z. B. warte auf Review" autocomplete="off">
+                </div>
+                <div class="form-actions">
+                    <button class="btn" type="submit" id="goal-load">Laden</button>
+                    <button class="btn btn-primary" type="button" id="goal-start">Start</button>
+                    <button class="btn" type="button" id="goal-edit">Edit</button>
+                    <button class="btn" type="button" id="goal-pause">Pause</button>
+                    <button class="btn" type="button" id="goal-resume">Resume</button>
+                    <button class="btn" type="button" id="goal-block">Block</button>
+                    <button class="btn" type="button" id="goal-complete">Complete</button>
+                    <button class="btn btn-danger" type="button" id="goal-clear">Clear</button>
+                </div>
+            </form>
+
+            <div id="goal-status" class="status" role="status" aria-live="polite"></div>
+
+            <div id="goal-view" class="card hidden"></div>
         </section>
 
         <section class="panel" id="panel-conversations" aria-labelledby="heading-conversations" hidden>

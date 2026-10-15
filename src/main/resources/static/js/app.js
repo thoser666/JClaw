@@ -393,6 +393,8 @@
                 $("#task-context").value = session.sessionId;
                 showPanel("agent");
             });
+            const goalBtn = el("button", { class: "btn btn-sm", text: "Ziel" });
+            goalBtn.addEventListener("click", () => goalSessionShortcut(session.sessionId));
             const deleteBtn = el("button", { class: "btn btn-danger btn-sm", text: "Löschen" });
             deleteBtn.addEventListener("click", async () => {
                 try {
@@ -403,10 +405,188 @@
                 }
             });
             actions.appendChild(selectBtn);
+            actions.appendChild(goalBtn);
             actions.appendChild(deleteBtn);
             tile.appendChild(actions);
 
             sessionsList.appendChild(tile);
         });
     }
+
+    /* ---------- Ziele (Goal-Composer, P4-07) ---------- */
+
+    const goalForm = $("#goal-form");
+    const goalStatus = $("#goal-status");
+    const goalView = $("#goal-view");
+
+    const GOAL_ENDPOINTS = {
+        start: "/goal/start",
+        edit: "/goal/edit",
+        pause: "/goal/pause",
+        resume: "/goal/resume",
+        block: "/goal/block",
+        complete: "/goal/complete",
+    };
+
+    function goalPath(action) {
+        const sessionId = $("#goal-session").value.trim();
+        const base = "/api/v1/sessions/" + encodeURIComponent(sessionId);
+        return action ? base + GOAL_ENDPOINTS[action] : base + "/goal";
+    }
+
+    function goalSessionShortcut(sessionId) {
+        $("#goal-session").value = sessionId;
+        showPanel("goals");
+        $("#goal-load").click();
+    }
+
+    function requireGoalSession() {
+        const sessionId = $("#goal-session").value.trim();
+        if (!sessionId) {
+            setStatus(goalStatus, "Bitte gib eine Session-ID ein.", "error");
+            return false;
+        }
+        return true;
+    }
+
+    function requireObjective() {
+        const objective = $("#goal-objective").value.trim();
+        if (!objective) {
+            setStatus(goalStatus, "Bitte gib ein Objective ein.", "error");
+            return null;
+        }
+        return objective;
+    }
+
+    function goalBadgeType(status) {
+        if (status === "ACTIVE") return "badge-on";
+        if (status === "PAUSED") return "badge-off";
+        if (status === "COMPLETE") return "badge-type";
+        return "badge-bad";
+    }
+
+    function renderGoal(goal) {
+        empty(goalView);
+        if (!goal) {
+            goalView.classList.add("hidden");
+            return;
+        }
+        goalView.classList.remove("hidden");
+
+        const head = el("div", { class: "tile-head" });
+        head.appendChild(el("h2", { class: "tile-title", text: goal.objective }));
+        head.appendChild(badge(goal.status, goalBadgeType(goal.status)));
+        goalView.appendChild(head);
+
+        const meta = el("div", { class: "tile-meta" });
+        if (goal.statusNote) meta.appendChild(el("div", { text: "Notiz: " + goal.statusNote }));
+        if (goal.tokenBudget) meta.appendChild(el("div", { text: "Token-Budget: " + goal.tokenBudget }));
+        meta.appendChild(el("div", { text: "Erstellt: " + formatTime(goal.createdAt) }));
+        if (goal.completedAt) {
+            meta.appendChild(el("div", { text: "Abgeschlossen: " + formatTime(goal.completedAt) }));
+        }
+        goalView.appendChild(meta);
+    }
+
+    function goalRequest(button, label, action, options, message) {
+        buttonBusy(button, true, label);
+        setStatus(goalStatus, "Arbeitet …");
+        return api(goalPath(action), options)
+            .then((result) => {
+                if (result && result.cleared) {
+                    renderGoal(null);
+                    setStatus(goalStatus, "Ziel gelöscht.");
+                } else {
+                    renderGoal(result);
+                    setStatus(goalStatus, message);
+                }
+            })
+            .catch((error) => setStatus(goalStatus, error.message, "error"))
+            .finally(() => buttonBusy(button, false, label));
+    }
+
+    function goalPostBody() {
+        const note = $("#goal-note").value.trim();
+        return {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(note ? { note } : {}),
+        };
+    }
+
+    goalForm.addEventListener("submit", (event) => {
+        event.preventDefault();
+        if (!requireGoalSession()) return;
+        setStatus(goalStatus, "Lädt Ziel …", "info");
+        api(goalPath())
+            .then((goal) => {
+                renderGoal(goal);
+                setStatus(goalStatus, "Ziel geladen.");
+            })
+            .catch((error) => {
+                if (error.message === "HTTP 404") {
+                    renderGoal(null);
+                    setStatus(goalStatus, "Kein Ziel für diese Session vorhanden.");
+                } else {
+                    setStatus(goalStatus, error.message, "error");
+                }
+            });
+    });
+
+    $("#goal-start").addEventListener("click", (event) => {
+        if (!requireGoalSession()) return;
+        const objective = requireObjective();
+        if (objective === null) return;
+        const budgetRaw = $("#goal-token-budget").value.trim();
+        const body = { objective };
+        if (budgetRaw) {
+            const budget = Number(budgetRaw);
+            if (!Number.isInteger(budget) || budget <= 0) {
+                setStatus(goalStatus, "Token-Budget muss eine positive ganze Zahl sein.", "error");
+                return;
+            }
+            body.tokenBudget = budget;
+        }
+        goalRequest(event.currentTarget, "Start", "start", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+        }, "Ziel gestartet.");
+    });
+
+    $("#goal-edit").addEventListener("click", (event) => {
+        if (!requireGoalSession()) return;
+        const objective = requireObjective();
+        if (objective === null) return;
+        goalRequest(event.currentTarget, "Edit", "edit", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ objective }),
+        }, "Ziel umformuliert.");
+    });
+
+    $("#goal-pause").addEventListener("click", (event) => {
+        if (!requireGoalSession()) return;
+        goalRequest(event.currentTarget, "Pause", "pause", goalPostBody(), "Ziel pausiert.");
+    });
+
+    $("#goal-resume").addEventListener("click", (event) => {
+        if (!requireGoalSession()) return;
+        goalRequest(event.currentTarget, "Resume", "resume", goalPostBody(), "Ziel fortgesetzt.");
+    });
+
+    $("#goal-block").addEventListener("click", (event) => {
+        if (!requireGoalSession()) return;
+        goalRequest(event.currentTarget, "Block", "block", goalPostBody(), "Ziel geblockt.");
+    });
+
+    $("#goal-complete").addEventListener("click", (event) => {
+        if (!requireGoalSession()) return;
+        goalRequest(event.currentTarget, "Complete", "complete", goalPostBody(), "Ziel abgeschlossen.");
+    });
+
+    $("#goal-clear").addEventListener("click", (event) => {
+        if (!requireGoalSession()) return;
+        goalRequest(event.currentTarget, "Clear", null, { method: "DELETE" }, "Ziel gelöscht.");
+    });
 })();
