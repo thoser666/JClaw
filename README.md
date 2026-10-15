@@ -527,7 +527,8 @@ Unter `http://localhost:8080` liefert Spring Boot eine schlanke Web-Oberfläche 
 | Bereich | Funktion |
 |---|---|
 | **Agent** | Aufgabe + optionale `contextId` eingeben, Ausführung anstoßen; Antwort mit Anzahl der Iterationen und aufklappbaren Tool-Aufrufen |
-| **Sessions** | Verfügbare Sessions mit Titel und Zeitstempel auflisten; Klick auf eine Session lädt sie in den Agent; Session löschen; **Session-Gruppen** zuweisen |
+| **Sessions** | Verfügbare Sessions mit Titel und Zeitstempel auflisten; Klick auf eine Session lädt sie in den Agent; Session löschen; **Session-Gruppen** zuweisen; **Ziel**-Shortcut öffnet den Goal-Composer |
+| **Ziele** | Goal-Composer für das Session-Ziel: Laden, Start (mit optionalem Token-Budget), Edit, Pause, Resume, Block, Complete, Clear — Status/Notiz/Budget als Kachel angezeigt |
 | **Konversationen** | Verlauf einer `contextId` laden (als Chat) und löschen |
 | **Skills** | Alle geladenen Skills mit Aktivierungsstatus |
 | **Plugins** | Erkannte Manifeste mit Typ, Version und Validierungsstatus |
@@ -641,6 +642,7 @@ Dauerhaftes Session-Ziel und persistente Folge-Prompts (OpenClaw 2026.8.x):
 * **Goals:** ein Ziel pro Session (`session_goal`-Tabelle, überlebt Gateway-Neustarts), Statusmaschine `active/paused/blocked/budget_limited/usage_limited/complete` (`complete` ist terminal), REST-Spiegel `/api/v1/sessions/{id}/goal` von `/goal start|edit|pause|resume|block|complete|clear`
 * **Model-Tools (OpenClaw-Spiegel):** `get_goal` (Status/Objective/Budget lesen), `create_goal` (nur auf ausdrücklichen Wunsch, optionales positives `token_budget`), `update_goal` (`complete`/`blocked` + optionale Notiz) — Pause/Resume/Clear bleiben Operator-/Session-Controls
 * **Session-Reset-Cleanup:** Auto-Reset (daily/idle), Session-Löschung und Session-Neuanlage löschen das Session-Ziel — kein verwaistes `session_goal` (OpenClaw: `/new` und `/reset` starten frischen Session-Kontext)
+* **Goal-Composer-UI:** Control-UI-Panel „Ziele" mit Laden/Start/Edit/Pause/Resume/Block/Complete/Clear (Enter lädt, 404 zeigt „kein Ziel"), Session-Kachel-Shortcut „Ziel"; Rendering ausschließlich über `textContent` (geprüft von `ControlUiResourceTest`, Spiegel-Test 983-987)
 * **Follow-up-Queue:** `follow_up`-Tabelle, enqueue/list/drain explizit — **keine Auto-Ausführung** beim Start (Deny-by-Default); offene Follow-ups werden beim Drain an den Agenten gesendet, Fehler lassen den Eintrag in der Queue
 * **REST-API:** `GET|POST|DELETE /api/v1/sessions/{id}/goal...`, `POST /api/v1/sessions/{id}/follow-ups`, `POST .../follow-ups/drain`
 
