@@ -526,7 +526,7 @@ Unter `http://localhost:8080` liefert Spring Boot eine schlanke Web-Oberfläche 
 
 | Bereich | Funktion |
 |---|---|
-| **Agent** | Aufgabe + optionale `contextId` eingeben, Ausführung anstoßen; Antwort mit Anzahl der Iterationen und aufklappbaren Tool-Aufrufen |
+| **Agent** | Aufgabe + optionale `contextId` eingeben, Ausführung anstoßen; Antwort mit Anzahl der Iterationen und aufklappbaren Tool-Aufrufen; **Im Hintergrund**-Start ohne Seitenwechsel mit Notification-Badge |
 | **Sessions** | Verfügbare Sessions mit Titel und Zeitstempel auflisten; Klick auf eine Session lädt sie in den Agent; Session löschen; **Session-Gruppen** zuweisen; **Ziel**-Shortcut öffnet den Goal-Composer |
 | **Ziele** | Goal-Composer für das Session-Ziel: Laden, Start (mit optionalem Token-Budget), Edit, Pause, Resume, Block, Complete, Clear — Status/Notiz/Budget als Kachel angezeigt |
 | **Konversationen** | Verlauf einer `contextId` laden (als Chat) und löschen |
@@ -653,6 +653,7 @@ Agent-Tasks asynchron im Hintergrund ausführen (OpenClaw 2026.8.x):
 * **Start ohne Blockieren:** `POST /api/v1/sessions/{id}/background-tasks` liefert sofort `202 Accepted` und führt den Prompt über den Agenten asynchron aus
 * **Persistenz:** `background_task`-Tabelle (H2) überlebt Gateway-Neustarts; verwaiste `RUNNING`-Tasks werden beim Start als `FAILED` markiert
 * **Completion-Benachrichtigung:** Status via `GET /api/v1/background-tasks/{id}` oder SSE-Push `GET /api/v1/background-tasks/{id}/events` (`event: completion` bei terminalem Status)
+* **Composer-UI:** Hintergrund-Start aus dem Agent-Panel ohne Seitenwechsel („Im Hintergrund" → `POST /api/v1/sessions/{id}/background-tasks`) und Notification-Badge im Sidebar-Footer, das per SSE (`event: completion`) erscheint und beim Klick zum Agent-Status springt (geprüft von `ControlUiResourceTest`, Spiegel-Test 988-992)
 
 ### Paritäts-Testsuite (P4-05)
 
