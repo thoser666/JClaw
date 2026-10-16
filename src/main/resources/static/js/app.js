@@ -194,6 +194,74 @@
         }
     }
 
+    /* ---------- Background-Tasks + Benachrichtigung (P4-08) ---------- */
+
+    const taskBackground = $("#task-background");
+    const notificationBadge = $("#notification-badge");
+    const notificationCount = $("#notification-count");
+    let notificationTotal = 0;
+
+    function bumpNotification() {
+        notificationTotal += 1;
+        notificationCount.textContent = String(notificationTotal);
+        notificationBadge.classList.remove("hidden");
+    }
+
+    notificationBadge.addEventListener("click", () => {
+        notificationTotal = 0;
+        notificationCount.textContent = "0";
+        notificationBadge.classList.add("hidden");
+        showPanel("agent");
+    });
+
+    function subscribeBackgroundTask(taskId) {
+        const source = new EventSource("/api/v1/background-tasks/" + encodeURIComponent(taskId) + "/events");
+        source.addEventListener("completion", (event) => {
+            source.close();
+            let status = "";
+            try {
+                const payload = JSON.parse(event.data);
+                if (payload && payload.task) status = payload.task.status || "";
+            } catch (_) {
+                /* unleserlicher Event-Payload – Status weglassen */
+            }
+            bumpNotification();
+            setStatus(taskStatus,
+                "Hintergrund-Task " + taskId + " abgeschlossen" + (status ? " (" + status + ")" : "") + ".",
+                status === "FAILED" ? "error" : "info");
+        });
+        source.addEventListener("error", () => source.close());
+    }
+
+    taskBackground.addEventListener("click", async () => {
+        const prompt = $("#task-prompt").value.trim();
+        const contextId = $("#task-context").value.trim();
+        if (!prompt) {
+            setStatus(taskStatus, "Bitte gib eine Aufgabe ein.", "error");
+            return;
+        }
+        if (!contextId) {
+            setStatus(taskStatus, "Für den Hintergrund-Start bitte eine Kontext-ID eingeben.", "error");
+            return;
+        }
+        buttonBusy(taskBackground, true, "Im Hintergrund");
+        setStatus(taskStatus, "Startet im Hintergrund …");
+        try {
+            const task = await api("/api/v1/sessions/" + encodeURIComponent(contextId) + "/background-tasks", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ prompt }),
+            });
+            setStatus(taskStatus,
+                "Task im Hintergrund gestartet (" + task.status + "). Abschluss erscheint als Benachrichtigung.");
+            subscribeBackgroundTask(task.id);
+        } catch (error) {
+            setStatus(taskStatus, error.message, "error");
+        } finally {
+            buttonBusy(taskBackground, false, "Im Hintergrund");
+        }
+    });
+
     /* ---------- Konversationen ---------- */
 
     const conversationForm = $("#conversation-form");

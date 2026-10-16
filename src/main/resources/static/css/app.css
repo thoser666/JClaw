@@ -618,6 +618,28 @@ body {
     border: 1px solid #dbe2fe;
 }
 
+/* ---------- Notification-Badge (P4-08) ---------- */
+
+.notification-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    align-self: flex-start;
+    margin-top: 12px;
+    padding: 4px 11px;
+    border: 1px solid #dbe2fe;
+    border-radius: 999px;
+    background: var(--accent-soft);
+    color: var(--accent-strong);
+    font-size: 11.5px;
+    font-weight: 650;
+    cursor: pointer;
+}
+
+.dark .notification-badge {
+    border-color: rgba(129, 140, 248, 0.3);
+}
+
 .empty {
     padding: 40px 20px;
     text-align: center;

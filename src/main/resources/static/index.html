@@ -38,6 +38,11 @@
             </button>
         </nav>
 
+        <button class="notification-badge hidden" type="button" id="notification-badge" aria-label="Benachrichtigung anzeigen">
+            <span aria-hidden="true">&#128276;</span>
+            <span id="notification-count">0</span>
+        </button>
+
         <div class="sidebar-footer">
             <button class="theme-toggle" type="button" id="theme-toggle" aria-label="Theme wechseln">
                 <span class="theme-toggle-icon" id="theme-icon" aria-hidden="true">&#9788;</span>
@@ -66,6 +71,7 @@
                 </div>
                 <div class="form-actions">
                     <button class="btn btn-primary" type="submit" id="task-submit">Ausführen</button>
+                    <button class="btn" type="button" id="task-background">Im Hintergrund</button>
                 </div>
             </form>
 

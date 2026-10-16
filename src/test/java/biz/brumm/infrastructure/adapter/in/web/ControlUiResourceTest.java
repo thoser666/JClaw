@@ -151,4 +151,50 @@ class ControlUiResourceTest {
                 .andExpect(status().isOk())
                 .andExpect(content().string(containsString("goalSessionShortcut")));
     }
+
+    @Test
+    void indexContainsBackgroundComposerControls() throws Exception {
+        mockMvc.perform(get("/index.html"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("id=\"task-background\"")))
+                .andExpect(content().string(containsString("id=\"notification-badge\"")))
+                .andExpect(content().string(containsString("id=\"notification-count\"")));
+    }
+
+    @Test
+    void scriptStartsBackgroundTasksWithoutPageSwitch() throws Exception {
+        mockMvc.perform(get("/js/app.js"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("\"/api/v1/background-tasks/\"")))
+                .andExpect(content().string(containsString("\"#task-background\"")))
+                .andExpect(content().string(containsString("Im Hintergrund")));
+    }
+
+    @Test
+    void scriptSubscribesToCompletionEvents() throws Exception {
+        mockMvc.perform(get("/js/app.js"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("new EventSource(")))
+                .andExpect(content().string(containsString("\"/events\"")))
+                .andExpect(content().string(containsString("addEventListener(\"completion\"")))
+                .andExpect(content().string(containsString("source.close()")));
+    }
+
+    @Test
+    void scriptShowsNotificationBadge() throws Exception {
+        mockMvc.perform(get("/js/app.js"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("bumpNotification")))
+                .andExpect(content().string(containsString("\"#notification-badge\"")))
+                .andExpect(content().string(containsString("\"#notification-count\"")))
+                .andExpect(content().string(containsString("showPanel(\"agent\")")));
+    }
+
+    @Test
+    void stylesheetContainsNotificationBadge() throws Exception {
+        mockMvc.perform(get("/css/app.css"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString(".notification-badge")))
+                .andExpect(content().string(containsString(".dark .notification-badge")));
+    }
 }
