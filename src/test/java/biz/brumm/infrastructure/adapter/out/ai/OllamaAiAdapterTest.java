@@ -6,6 +6,8 @@ import biz.brumm.domain.model.ToolInvocation;
 import biz.brumm.domain.port.out.AgentTool;
 import biz.brumm.domain.port.out.ToolPolicy;
 import biz.brumm.domain.service.AgentLoopLimitExceededException;
+import biz.brumm.domain.service.CompactionService;
+import biz.brumm.domain.service.MemoryVaultService;
 import biz.brumm.infrastructure.adapter.out.ai.tool.CalculatorTool;
 import biz.brumm.infrastructure.adapter.out.ai.tool.DateTimeTool;
 import biz.brumm.infrastructure.adapter.out.plugin.NodeSidecarPluginRuntime;
@@ -63,6 +65,9 @@ class OllamaAiAdapterTest {
     @Mock
     private ObjectProvider<NodeSidecarPluginRuntime> nodeSidecarPluginRuntimeProvider;
 
+    @Mock
+    private ObjectProvider<biz.brumm.domain.service.MemoryVaultService> memoryVaultServiceProvider;
+
     private static final String TOOL_CALL_ID = "call_123";
 
     private OllamaAiAdapter adapter(List<AgentTool> tools) {
@@ -81,7 +86,8 @@ class OllamaAiAdapterTest {
         @SuppressWarnings("unchecked")
         ObjectProvider<biz.brumm.domain.service.CompactionService> compactionProvider = mock(ObjectProvider.class);
         when(compactionProvider.getIfAvailable()).thenReturn(null);
-        return new OllamaAiAdapter(chatModel, toolCallingManager, tools, mcpToolRegistryProvider, memory, policy, hookProvider, compactionProvider, nodeSidecarPluginRuntimeProvider);
+        when(memoryVaultServiceProvider.getIfAvailable()).thenReturn(null);
+        return new OllamaAiAdapter(chatModel, toolCallingManager, tools, mcpToolRegistryProvider, memory, policy, hookProvider, compactionProvider, memoryVaultServiceProvider, nodeSidecarPluginRuntimeProvider);
     }
 
     private MessageWindowChatMemory newMemory() {
@@ -103,6 +109,43 @@ class OllamaAiAdapterTest {
         assertThat(response.toolInvocations()).isEmpty();
         verify(chatModel, times(1)).call(any(Prompt.class));
         verify(toolCallingManager, times(0)).executeToolCalls(any(), any());
+    }
+
+    @Test
+    void compactionTriggersMemoryVaultWriterBeforeCompacting() {
+        ChatMemory memory = mock(ChatMemory.class);
+        when(memory.get("ctx-1")).thenReturn(List.of(new UserMessage("alt"), new UserMessage("neu")));
+
+        CompactionService compactionService = mock(CompactionService.class);
+        when(compactionService.isCompactionNeeded(any())).thenReturn(true);
+        when(compactionService.compact(any())).thenReturn(
+                biz.brumm.domain.model.CompactionResult.of(List.of("summary"), "summary", 1, 1));
+
+        MemoryVaultService memoryVaultService = mock(MemoryVaultService.class);
+        when(memoryVaultService.syncConversation("ctx-1")).thenReturn(true);
+
+        @SuppressWarnings("unchecked")
+        ObjectProvider<CompactionService> compactionProvider = mock(ObjectProvider.class);
+        when(compactionProvider.getIfAvailable()).thenReturn(compactionService);
+        @SuppressWarnings("unchecked")
+        ObjectProvider<MemoryVaultService> vaultProvider = mock(ObjectProvider.class);
+        when(vaultProvider.getIfAvailable()).thenReturn(memoryVaultService);
+        @SuppressWarnings("unchecked")
+        ObjectProvider<biz.brumm.domain.port.out.HookCallback> hookProvider = mock(ObjectProvider.class);
+        when(hookProvider.getIfAvailable()).thenReturn(null);
+        when(chatModel.getOptions()).thenReturn(OllamaChatOptions.builder().model("qwen3:8b").build());
+
+        OllamaAiAdapter adapter = new OllamaAiAdapter(chatModel, toolCallingManager, List.of(new DateTimeTool()),
+                mcpToolRegistryProvider, memory, name -> true, hookProvider, compactionProvider, vaultProvider,
+                nodeSidecarPluginRuntimeProvider);
+
+        when(chatModel.call(any(Prompt.class))).thenReturn(finalResponse("ok"));
+
+        AgentResponse response = adapter.execute(new AgentCommand("Frage", "ctx-1"), "System", 5);
+
+        assertThat(response.content()).isEqualTo("ok");
+        verify(memoryVaultService).syncConversation("ctx-1");
+        verify(compactionService).compact(any());
     }
 
     @Test

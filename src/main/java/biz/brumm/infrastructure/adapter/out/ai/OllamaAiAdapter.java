@@ -11,6 +11,7 @@ import biz.brumm.domain.port.out.HookCallback;
 import biz.brumm.domain.port.out.ToolPolicy;
 import biz.brumm.domain.service.AgentLoopLimitExceededException;
 import biz.brumm.domain.service.CompactionService;
+import biz.brumm.domain.service.MemoryVaultService;
 import biz.brumm.infrastructure.adapter.out.plugin.NodeSidecarPluginRuntime;
 import biz.brumm.infrastructure.mcp.McpToolRegistry;
 import org.slf4j.Logger;
@@ -49,18 +50,21 @@ public class OllamaAiAdapter implements AiProviderPort {
     private final List<ToolCallback> toolCallbacks;
     private final HookCallback hookCallback;
     private final CompactionService compactionService;
+    private final MemoryVaultService memoryVaultService;
     private final ObjectProvider<NodeSidecarPluginRuntime> nodeSidecarPluginRuntimeProvider;
 
     public OllamaAiAdapter(ChatModel chatModel, ToolCallingManager toolCallingManager, List<AgentTool> tools,
                            ObjectProvider<McpToolRegistry> mcpToolRegistry, ChatMemory chatMemory,
                            ToolPolicy toolPolicy, ObjectProvider<HookCallback> hookCallbackProvider,
                            ObjectProvider<CompactionService> compactionServiceProvider,
+                           ObjectProvider<MemoryVaultService> memoryVaultServiceProvider,
                            ObjectProvider<NodeSidecarPluginRuntime> nodeSidecarPluginRuntimeProvider) {
         this.chatModel = chatModel;
         this.toolCallingManager = toolCallingManager;
         this.chatMemory = chatMemory;
         this.hookCallback = hookCallbackProvider.getIfAvailable();
         this.compactionService = compactionServiceProvider.getIfAvailable();
+        this.memoryVaultService = memoryVaultServiceProvider.getIfAvailable();
         this.nodeSidecarPluginRuntimeProvider = nodeSidecarPluginRuntimeProvider;
         List<ToolCallback> callbacks = new ArrayList<>(List.of(ToolCallbacks.from(tools.toArray())));
         McpToolRegistry mcpRegistry = mcpToolRegistry.getIfAvailable();
@@ -105,6 +109,13 @@ public class OllamaAiAdapter implements AiProviderPort {
             List<Message> history = chatMemory.get(command.contextId());
             // Compaction: Ältere Nachrichten durch Zusammenfassung ersetzen
             if (compactionService != null && compactionService.isCompactionNeeded(history)) {
+                // Writer-Trigger (P4-02): vollständige Konversation vor der Kompression
+                // als Memory-Asset persistieren (H2 bleibt Quelle der Wahrheit).
+                if (memoryVaultService != null && command.contextId() != null && !command.contextId().isBlank()) {
+                    boolean stored = memoryVaultService.syncConversation(command.contextId());
+                    log.info("Memory-Vault-Writer-Trigger vor Compaction: contextId={}, stored={}.",
+                            command.contextId(), stored);
+                }
                 CompactionResult result = compactionService.compact(history);
                 log.info("Compaction angewendet: {} entfernt, {} behalten.",
                         result.messagesRemoved(), result.messagesRetained());
