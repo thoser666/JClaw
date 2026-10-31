@@ -575,6 +575,7 @@ Zusätzlich zur Agent-API stehen Gateway-Endpoints zur Verfügung:
 | `/api/v1/background-tasks/{id}/events` | GET | SSE: Completion-Benachrichtigung (`event: completion`) |
 | `/api/v1/memory/{contextId}/sync` | POST | Konversation als Vault-Dokument materialisieren |
 | `/api/v1/memory` | GET | Alle Memory-Vault-Dokumente auflisten |
+| `/api/v1/memory/search` | GET | Semantische Top-K-Suche über indizierte Vault-Dokumente (`q`, `limit`) |
 | `/api/v1/channels` | GET | Alle Channels auflisten |
 | `/api/v1/channels` | POST | Neuen Channel erstellen |
 | `/api/v1/channels/{id}` | GET | Einzelnen Channel abfragen |
