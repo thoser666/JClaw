@@ -1,6 +1,7 @@
 package biz.brumm.infrastructure.adapter.in.web;
 
 import biz.brumm.domain.model.MemoryDocument;
+import biz.brumm.domain.service.MemoryRetrievalService;
 import biz.brumm.domain.service.MemoryVaultService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -27,6 +28,9 @@ class MemoryVaultControllerTest {
 
     @MockitoBean
     private MemoryVaultService memoryVaultService;
+
+    @MockitoBean
+    private MemoryRetrievalService memoryRetrievalService;
 
     @Test
     void syncStoresVaultDocument() throws Exception {
@@ -61,5 +65,24 @@ class MemoryVaultControllerTest {
                 .andExpect(jsonPath("$[0].conversationId").value("ctx-1"))
                 .andExpect(jsonPath("$[0].title").value("Titel"))
                 .andExpect(jsonPath("$[0].content").value("Inhalt"));
+    }
+
+    @Test
+    void searchDelegatesToRetrievalService() throws Exception {
+        when(memoryRetrievalService.search("Frage", 3)).thenReturn(List.of(
+                new MemoryDocument("ctx-1", "Titel", Instant.parse("2026-09-03T10:00:00Z"),
+                        List.of("a"), "Inhalt")));
+
+        mockMvc.perform(get("/api/v1/memory/search").param("q", "Frage").param("limit", "3"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(1)))
+                .andExpect(jsonPath("$[0].conversationId").value("ctx-1"));
+    }
+
+    @Test
+    void searchWithBlankQueryReturnsEmpty() throws Exception {
+        mockMvc.perform(get("/api/v1/memory/search").param("q", "   "))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(0)));
     }
 }

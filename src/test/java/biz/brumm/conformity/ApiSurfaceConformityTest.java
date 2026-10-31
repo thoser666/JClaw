@@ -84,6 +84,7 @@ class ApiSurfaceConformityTest {
             // MemoryVaultController
             "POST /api/v1/memory/{contextId}/sync",
             "GET /api/v1/memory",
+            "GET /api/v1/memory/search",
             // AuthRestController
             "GET /api/v1/auth/tokens",
             "POST /api/v1/auth/tokens",

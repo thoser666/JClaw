@@ -25,10 +25,18 @@ public class MemoryVaultService {
 
     private final ConversationStore conversationStore;
     private final MemoryVaultStore vaultStore;
+    private final ObjectProvider<MemoryRetrievalService> retrievalServiceProvider;
 
     public MemoryVaultService(ConversationStore conversationStore, ObjectProvider<MemoryVaultStore> vaultStoreProvider) {
+        this(conversationStore, vaultStoreProvider, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public MemoryVaultService(ConversationStore conversationStore, ObjectProvider<MemoryVaultStore> vaultStoreProvider,
+                              ObjectProvider<MemoryRetrievalService> retrievalServiceProvider) {
         this.conversationStore = conversationStore;
         this.vaultStore = vaultStoreProvider.getIfAvailable();
+        this.retrievalServiceProvider = retrievalServiceProvider;
     }
 
     /**
@@ -51,7 +59,16 @@ public class MemoryVaultService {
         }
         String title = deriveTitle(messages);
         String content = MarkdownMemoryVault.renderMessages(messages);
-        vaultStore.store(new MemoryDocument(contextId, title, Instant.now(), List.of(), content));
+        MemoryDocument document = new MemoryDocument(contextId, title, Instant.now(), List.of(), content);
+        vaultStore.store(document);
+        // Semantisches Retrieval (P4-02): Dokument in den Vektorindex aufnehmen,
+        // wenn ein Embedding-Modell verfügbar ist (No-op sonst).
+        if (retrievalServiceProvider != null) {
+            MemoryRetrievalService retrievalService = retrievalServiceProvider.getIfAvailable();
+            if (retrievalService != null) {
+                retrievalService.index(document);
+            }
+        }
         return true;
     }
 
