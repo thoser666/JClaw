@@ -85,6 +85,11 @@ class ApiSurfaceConformityTest {
             "POST /api/v1/memory/{contextId}/sync",
             "GET /api/v1/memory",
             "GET /api/v1/memory/search",
+            // BackupController
+            "POST /api/v1/backup/create",
+            "GET /api/v1/backup",
+            "POST /api/v1/backup/verify",
+            "POST /api/v1/backup/restore",
             // AuthRestController
             "GET /api/v1/auth/tokens",
             "POST /api/v1/auth/tokens",
