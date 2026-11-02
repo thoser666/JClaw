@@ -575,6 +575,7 @@ Zusätzlich zur Agent-API stehen Gateway-Endpoints zur Verfügung:
 | `/api/v1/background-tasks/{id}/events` | GET | SSE: Completion-Benachrichtigung (`event: completion`) |
 | `/api/v1/memory/{contextId}/sync` | POST | Konversation als Vault-Dokument materialisieren |
 | `/api/v1/memory` | GET | Alle Memory-Vault-Dokumente auflisten |
+| /api/version | GET | API-Version, unterstuetzte Versionen, Deprecation-Policy |
 | /api/v1/backup/create | POST | Backup-Archiv des Datenverzeichnisses erstellen |
 | /api/v1/backup | GET | Vorhandene Backup-Archive auflisten |
 | /api/v1/backup/verify | POST | Backup-Archiv auf Integritaet pruefen |
