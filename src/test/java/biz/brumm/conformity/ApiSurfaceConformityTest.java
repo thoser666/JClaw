@@ -85,6 +85,13 @@ class ApiSurfaceConformityTest {
             "POST /api/v1/memory/{contextId}/sync",
             "GET /api/v1/memory",
             "GET /api/v1/memory/search",
+            // SharedMemoryPoolController (P4-15)
+            "POST /api/v1/memory/pools",
+            "GET /api/v1/memory/pools",
+            "GET /api/v1/memory/pools/{id}",
+            "DELETE /api/v1/memory/pools/{id}",
+            "POST /api/v1/memory/pools/{id}/documents",
+            "GET /api/v1/memory/pools/{id}/search",
             // BackupController
             "POST /api/v1/backup/create",
             "GET /api/v1/backup",
