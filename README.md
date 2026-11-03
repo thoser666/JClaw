@@ -575,6 +575,10 @@ Zusätzlich zur Agent-API stehen Gateway-Endpoints zur Verfügung:
 | `/api/v1/background-tasks/{id}/events` | GET | SSE: Completion-Benachrichtigung (`event: completion`) |
 | `/api/v1/memory/{contextId}/sync` | POST | Konversation als Vault-Dokument materialisieren |
 | `/api/v1/memory` | GET | Alle Memory-Vault-Dokumente auflisten |
+| /api/v1/memory/pools | GET/POST | Shared Memory Pools auflisten/anlegen |
+| /api/v1/memory/pools/{id} | GET/DELETE | Pool lesen/loeschen |
+| /api/v1/memory/pools/{id}/documents | POST | Dokument in Pool indizieren |
+| /api/v1/memory/pools/{id}/search | GET | Semantische Suche im Pool |
 | /api/version | GET | API-Version, unterstuetzte Versionen, Deprecation-Policy |
 | /api/v1/backup/create | POST | Backup-Archiv des Datenverzeichnisses erstellen |
 | /api/v1/backup | GET | Vorhandene Backup-Archive auflisten |
