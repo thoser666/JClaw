@@ -1,6 +1,6 @@
 # JClaw
 
-JClaw ist ein autonomer, hochgradig strukturierter Software-Agent. Das Projekt ist ein moderner Java- und Spring-basierter Port von OpenClaw, optimiert für lokale LLM-Infrastrukturen via Ollama.
+JClaw ist ein autonomer, hochgradig strukturierter Software-Agent. Das Projekt ist ein moderner Java- und Spring-basierter Port von OpenClaw, optimiert für lokale LLM-Infrastrukturen via Ollama. Der Modell-Provider ist über `jclaw.ai.provider` (Standard: `ollama`) konfigurierbar; `openai` aktiviert einen OpenAI-kompatiblen Adapter (`jclaw.ai.openai.*` für Base-URL, API-Key, Modell).
 
 Die Anwendung ist strikt nach den Prinzipien der **Hexagonalen Architektur** (Ports and Adapters) aufgebaut, um die Kern-Domainlogik vollständig von Infrastruktur-Entscheidungen (wie dem spezifischen KI-Provider oder Web-Frameworks) zu entkoppeln.
 

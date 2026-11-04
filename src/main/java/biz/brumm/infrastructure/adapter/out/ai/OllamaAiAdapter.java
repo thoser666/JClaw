@@ -40,6 +40,7 @@ import java.util.List;
 import java.util.Map;
 
 @Component
+@org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(prefix = "jclaw.ai", name = "provider", havingValue = "ollama", matchIfMissing = true)
 public class OllamaAiAdapter implements AiProviderPort {
 
     private static final Logger log = LoggerFactory.getLogger(OllamaAiAdapter.class);
