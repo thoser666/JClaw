@@ -3,8 +3,10 @@ package biz.brumm.infrastructure.adapter.out.channel;
 import biz.brumm.domain.model.Channel;
 import biz.brumm.domain.model.ChannelMessage;
 import biz.brumm.domain.model.ChannelType;
+import biz.brumm.domain.model.MediaAttachment;
 import biz.brumm.domain.model.MessageDirection;
 import biz.brumm.domain.port.out.ChannelAdapter;
+import biz.brumm.domain.port.out.ChannelMediaAdapter;
 import jakarta.websocket.ClientEndpoint;
 import jakarta.websocket.CloseReason;
 import jakarta.websocket.ContainerProvider;
@@ -51,7 +53,7 @@ import java.util.concurrent.atomic.AtomicReference;
  */
 @Component
 @ConditionalOnProperty(prefix = "jclaw.channels", name = "enabled", havingValue = "true")
-public class DiscordChannelAdapter implements ChannelAdapter {
+public class DiscordChannelAdapter implements ChannelMediaAdapter {
 
     private static final Logger log = LoggerFactory.getLogger(DiscordChannelAdapter.class);
     private static final String DEFAULT_BASE_URL = "https://discord.com/api/v10";
@@ -108,6 +110,68 @@ public class DiscordChannelAdapter implements ChannelAdapter {
         String id = json.path("id").asText(null);
         return ChannelMessage.outbound(channel.id(), message.content(),
                 channelId, message.sessionId()).withExternalId(id);
+    }
+
+    @Override
+    public boolean supportsMedia() {
+        return true;
+    }
+
+    @Override
+    public ChannelMessage sendMedia(Channel channel, ChannelMessage message, MediaAttachment attachment)
+            throws ChannelException {
+        if (attachment == null || attachment.isEmpty()) {
+            throw new ChannelException("Medien-Anhang fehlt oder ist leer.");
+        }
+        String token = requireToken(channel);
+        String channelId = resolveChannelId(message);
+        if (channelId == null || channelId.isBlank()) {
+            throw new ChannelException("Kein Discord-channel (threadId/senderId) fuer die Medien-Nachricht vorhanden.");
+        }
+
+        String url = baseUrl(channel) + "/channels/" + channelId + "/messages";
+        String boundary = MultipartBody.newBoundary();
+        String caption = message.content() == null ? "" : message.content();
+        java.util.Map<String, String> fields = caption.isBlank()
+                ? java.util.Map.of()
+                : java.util.Map.of("content", caption);
+        byte[] body = MultipartBody.build(boundary, fields,
+                java.util.List.of(MultipartBody.Part.file("files[0]", attachment.fileName(),
+                        attachment.mimeType(), attachment.data())));
+
+        JsonNode json;
+        try {
+            json = postAuthorizedMultipart(url, body, boundary, token);
+        } catch (IOException | InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new ChannelException("Discord-Medienaufruf fehlgeschlagen: " + e.getMessage(), e);
+        }
+        if (json.path("message").isObject()) {
+            throw new ChannelException("Discord sendMedia fehlgeschlagen: "
+                    + json.path("message").path("message").asText(json.path("message").asText("unbekannter Fehler")));
+        }
+        String id = json.path("id").asText(null);
+        return ChannelMessage.outbound(channel.id(), caption, channelId, message.sessionId())
+                .withExternalId(id);
+    }
+
+    private JsonNode postAuthorizedMultipart(String url, byte[] body, String boundary, String token)
+            throws IOException, ChannelException, InterruptedException {
+        HttpRequest request = HttpRequest.newBuilder(URI.create(url))
+                .timeout(Duration.ofSeconds(30))
+                .header("Content-Type", MultipartBody.contentType(boundary))
+                .header("Authorization", "Bot " + token)
+                .POST(HttpRequest.BodyPublishers.ofByteArray(body))
+                .build();
+        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+        if (response.statusCode() >= 400) {
+            throw new ChannelException("Discord-Medienfehler: HTTP " + response.statusCode());
+        }
+        try {
+            return objectMapper.readTree(response.body());
+        } catch (JacksonException e) {
+            throw new ChannelException("Ungueltige Discord-Antwort.", e);
+        }
     }
 
     @Override

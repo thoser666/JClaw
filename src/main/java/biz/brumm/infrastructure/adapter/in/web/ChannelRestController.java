@@ -121,6 +121,54 @@ private final ChannelService channelService;
         }
     }
 
+    @PostMapping("/{id}/media")
+    public ResponseEntity<Map<String, Object>> sendMedia(@PathVariable String id,
+                                                         @RequestBody Map<String, Object> body) {
+        var opt = channelService.findById(id);
+        if (opt.isEmpty()) {
+            return ResponseEntity.notFound().build();
+        }
+        Channel ch = opt.get();
+
+        Object dataObj = body.get("dataBase64");
+        if (!(dataObj instanceof String dataBase64) || dataBase64.isBlank()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "dataBase64 ist erforderlich."));
+        }
+
+        byte[] data;
+        try {
+            data = java.util.Base64.getDecoder().decode(dataBase64);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", "dataBase64 ist kein gueltiges Base64."));
+        }
+        if (data.length == 0) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Medien-Anhang ist leer."));
+        }
+
+        MediaAttachment.MediaKind kind;
+        try {
+            String kindStr = body.get("kind") instanceof String s ? s : "DOCUMENT";
+            kind = MediaAttachment.MediaKind.valueOf(kindStr.toUpperCase());
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Unbekannter Medien-Typ."));
+        }
+
+        String mimeType = body.get("mimeType") instanceof String s ? s : null;
+        String fileName = body.get("fileName") instanceof String s ? s : null;
+        String caption = body.get("caption") instanceof String s ? s : "";
+        String threadId = body.get("threadId") instanceof String s ? s : null;
+        String sessionId = body.get("sessionId") instanceof String s ? s : null;
+
+        MediaAttachment attachment = new MediaAttachment(kind, mimeType, fileName, data);
+
+        try {
+            ChannelMessage sent = channelService.sendMedia(ch, caption, threadId, sessionId, attachment);
+            return ResponseEntity.ok(messageToMap(sent));
+        } catch (ChannelAdapter.ChannelException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
     @PostMapping("/inbound")
     public ResponseEntity<Map<String, Object>> inbound(@RequestBody Map<String, String> body) {
         String channelId = body.get("channelId");

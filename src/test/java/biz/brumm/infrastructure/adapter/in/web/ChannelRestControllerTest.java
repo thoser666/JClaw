@@ -1,6 +1,7 @@
 package biz.brumm.infrastructure.adapter.in.web;
 
 import biz.brumm.domain.model.*;
+import biz.brumm.domain.port.out.ChannelAdapter;
 import biz.brumm.domain.service.ChannelService;
 import biz.brumm.domain.service.CredentialLeakGuard;
 import org.junit.jupiter.api.BeforeEach;
@@ -133,5 +134,65 @@ class ChannelRestControllerTest {
         mockMvc.perform(get("/api/v1/channels/ch-1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.config.token").value("[REDACTED]"));
+    }
+
+    @Test
+    void sendMediaDelegatesToChannelService() throws Exception {
+        when(channelService.findById("ch-1")).thenReturn(Optional.of(createTestChannel()));
+        when(channelService.sendMedia(any(), any(), any(), any(), any()))
+                .thenReturn(ChannelMessage.outbound("ch-1", "cap", "42", "s1").withExternalId("e-1"));
+
+        mockMvc.perform(post("/api/v1/channels/ch-1/media")
+                        .contentType("application/json")
+                        .content("{\"dataBase64\":\"AQID\",\"kind\":\"AUDIO\",\"mimeType\":\"audio/ogg\","
+                                + "\"fileName\":\"n.ogg\",\"caption\":\"cap\",\"threadId\":\"42\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.externalId").value("e-1"))
+                .andExpect(jsonPath("$.direction").value("OUTBOUND"));
+    }
+
+    @Test
+    void sendMediaRejectsInvalidBase64() throws Exception {
+        when(channelService.findById("ch-1")).thenReturn(Optional.of(createTestChannel()));
+
+        mockMvc.perform(post("/api/v1/channels/ch-1/media")
+                        .contentType("application/json")
+                        .content("{\"dataBase64\":\"!!!kein-base64!!!\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("dataBase64 ist kein gueltiges Base64."));
+    }
+
+    @Test
+    void sendMediaRejectsMissingPayload() throws Exception {
+        when(channelService.findById("ch-1")).thenReturn(Optional.of(createTestChannel()));
+
+        mockMvc.perform(post("/api/v1/channels/ch-1/media")
+                        .contentType("application/json")
+                        .content("{}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("dataBase64 ist erforderlich."));
+    }
+
+    @Test
+    void sendMediaRejectsUnknownChannel() throws Exception {
+        when(channelService.findById("999")).thenReturn(Optional.empty());
+
+        mockMvc.perform(post("/api/v1/channels/999/media")
+                        .contentType("application/json")
+                        .content("{\"dataBase64\":\"AQID\"}"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void sendMediaReportsAdapterError() throws Exception {
+        when(channelService.findById("ch-1")).thenReturn(Optional.of(createTestChannel()));
+        when(channelService.sendMedia(any(), any(), any(), any(), any()))
+                .thenThrow(new ChannelAdapter.ChannelException("kein Adapter"));
+
+        mockMvc.perform(post("/api/v1/channels/ch-1/media")
+                        .contentType("application/json")
+                        .content("{\"dataBase64\":\"AQID\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("kein Adapter"));
     }
 }

@@ -3,8 +3,10 @@ package biz.brumm.infrastructure.adapter.out.channel;
 import biz.brumm.domain.model.Channel;
 import biz.brumm.domain.model.ChannelMessage;
 import biz.brumm.domain.model.ChannelType;
+import biz.brumm.domain.model.MediaAttachment;
 import biz.brumm.domain.model.MessageDirection;
 import biz.brumm.domain.port.out.ChannelAdapter;
+import biz.brumm.domain.port.out.ChannelMediaAdapter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -22,6 +24,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -42,7 +45,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  */
 @Component
 @ConditionalOnProperty(prefix = "jclaw.channels", name = "enabled", havingValue = "true")
-public class TelegramChannelAdapter implements ChannelAdapter {
+public class TelegramChannelAdapter implements ChannelMediaAdapter {
 
     private static final Logger log = LoggerFactory.getLogger(TelegramChannelAdapter.class);
     private static final String DEFAULT_BASE_URL = "https://api.telegram.org";
@@ -104,6 +107,83 @@ public class TelegramChannelAdapter implements ChannelAdapter {
         }
         String token = configString(channel, CONFIG_TOKEN);
         return token != null && !token.isBlank();
+    }
+
+    @Override
+    public boolean supportsMedia() {
+        return true;
+    }
+
+    @Override
+    public ChannelMessage sendMedia(Channel channel, ChannelMessage message, MediaAttachment attachment)
+            throws ChannelException {
+        if (attachment == null || attachment.isEmpty()) {
+            throw new ChannelException("Medien-Anhang fehlt oder ist leer.");
+        }
+        String token = requireToken(channel);
+        String chatId = resolveChatId(message);
+        if (chatId == null || chatId.isBlank()) {
+            throw new ChannelException("Kein chatId (threadId/senderId) fuer die Medien-Nachricht vorhanden.");
+        }
+
+        MediaTarget target = resolveTarget(attachment);
+        String url = baseUrl(channel) + "/bot" + token + "/" + target.endpoint();
+        String boundary = MultipartBody.newBoundary();
+        byte[] body = MultipartBody.build(boundary,
+                Map.of("chat_id", chatId),
+                List.of(MultipartBody.Part.file(target.fileField(), attachment.fileName(),
+                        attachment.mimeType(), attachment.data())));
+
+        JsonNode json;
+        try {
+            json = postMultipart(url, body, boundary, channel);
+        } catch (IOException | InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new ChannelException("Telegram-Medienaufruf fehlgeschlagen: " + e.getMessage(), e);
+        }
+        if (!json.path("ok").asBoolean(false)) {
+            throw new ChannelException("Telegram " + target.endpoint() + " fehlgeschlagen: "
+                    + json.path("description").asText(json.toString()));
+        }
+        JsonNode result = json.path("result");
+        String externalId = result.path("message_id").asText(null);
+        String caption = message.content() == null ? "" : message.content();
+        return ChannelMessage.outbound(channel.id(), caption, chatId, message.sessionId())
+                .withExternalId(externalId);
+    }
+
+    /**
+     * Wählt Telegram-Endpunkt und Datei-Feldname passend zum Anhang-Typ.
+     */
+    private MediaTarget resolveTarget(MediaAttachment attachment) {
+        return switch (attachment.kind()) {
+            case AUDIO -> attachment.isVoiceNote()
+                    ? new MediaTarget("sendVoice", "voice")
+                    : new MediaTarget("sendAudio", "audio");
+            case IMAGE -> new MediaTarget("sendPhoto", "photo");
+            case DOCUMENT -> new MediaTarget("sendDocument", "document");
+        };
+    }
+
+    private record MediaTarget(String endpoint, String fileField) {
+    }
+
+    private JsonNode postMultipart(String url, byte[] body, String boundary, Channel channel)
+            throws IOException, ChannelException, InterruptedException {
+        HttpRequest request = HttpRequest.newBuilder(URI.create(url))
+                .timeout(Duration.ofSeconds(pollTimeout(channel) + 10))
+                .header("Content-Type", MultipartBody.contentType(boundary))
+                .POST(HttpRequest.BodyPublishers.ofByteArray(body))
+                .build();
+        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+        if (response.statusCode() >= 400) {
+            throw new ChannelException("Telegram-Medienfehler: HTTP " + response.statusCode());
+        }
+        try {
+            return objectMapper.readTree(response.body());
+        } catch (JacksonException e) {
+            throw new ChannelException("Ungueltige Telegram-Antwort.", e);
+        }
     }
 
     @Override

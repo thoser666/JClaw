@@ -76,6 +76,7 @@ class ApiSurfaceConformityTest {
             "PUT /api/v1/channels/{id}",
             "DELETE /api/v1/channels/{id}",
             "POST /api/v1/channels/{id}/send",
+            "POST /api/v1/channels/{id}/media",
             "POST /api/v1/channels/inbound",
             "GET /api/v1/channels/{id}/bindings",
             "POST /api/v1/channels/{id}/bindings",

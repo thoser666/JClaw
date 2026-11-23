@@ -2,6 +2,7 @@ package biz.brumm.domain.service;
 
 import biz.brumm.domain.model.*;
 import biz.brumm.domain.port.out.ChannelAdapter;
+import biz.brumm.domain.port.out.ChannelMediaAdapter;
 import biz.brumm.domain.port.out.ChannelStore;
 import biz.brumm.domain.port.out.PluginHookDispatcher;
 import org.slf4j.Logger;
@@ -103,6 +104,60 @@ public class ChannelService {
                 Map.of("channelId", channel.id(), "sessionId", sessionId == null ? "" : sessionId,
                         "threadId", threadId == null ? "" : threadId, "content", sanitized,
                         "messageId", sent.id()));
+        return sent;
+    }
+
+    // --- Medien-Nachrichten (P3-07) ---
+
+    /**
+     * Sendet eine Medien-Nachricht (Audio/Bild/Dokument) über den Channel-Adapter.
+     *
+     * @throws ChannelAdapter.ChannelException wenn kein Adapter registriert, der Channel nicht
+     *         verfügbar ist, der Adapter keine Medien unterstützt oder der Versand fehlschlägt
+     */
+    public ChannelMessage sendMedia(Channel channel, String caption, String threadId, String sessionId,
+                                    MediaAttachment attachment)
+            throws ChannelAdapter.ChannelException {
+        if (attachment == null || attachment.isEmpty()) {
+            throw new ChannelAdapter.ChannelException("Medien-Anhang fehlt oder ist leer.");
+        }
+        ChannelAdapter adapter = adapters.get(channel.type());
+        if (adapter == null) {
+            throw new ChannelAdapter.ChannelException(
+                    "Kein Adapter fuer Channel-Typ " + channel.type() + " registriert.");
+        }
+        if (!(adapter instanceof ChannelMediaAdapter mediaAdapter) || !mediaAdapter.supportsMedia()) {
+            throw new ChannelAdapter.ChannelException(
+                    "Channel-Typ " + channel.type() + " unterstuetzt keine Medien-Nachrichten.");
+        }
+        if (!adapter.isAvailable(channel)) {
+            throw new ChannelAdapter.ChannelException(
+                    "Channel '" + channel.name() + "' ist nicht verfuegbar.");
+        }
+
+        String sanitizedCaption = caption == null ? "" : credentialLeakGuard.redact(caption);
+
+        // message_sending (OpenClaw): blockbarer Hook vor dem eigentlichen Versand
+        PluginHookDispatcher.HookOutcome sendDecision = pluginHooks.dispatch("message_sending",
+                Map.of("channelId", channel.id(), "sessionId", sessionId == null ? "" : sessionId,
+                        "threadId", threadId == null ? "" : threadId,
+                        "content", sanitizedCaption, "mediaType", attachment.kind().name()));
+        if (sendDecision.blocked()) {
+            log.warn("Medien-Nachricht an '{}' blockiert durch message_sending-Hook: {}",
+                    channel.name(), sendDecision.message());
+            throw new ChannelAdapter.ChannelException(
+                    "Versand blockiert durch message_sending-Hook: " + sendDecision.message());
+        }
+
+        ChannelMessage outbound = ChannelMessage.outbound(channel.id(), sanitizedCaption, threadId, sessionId);
+        ChannelMessage sent = mediaAdapter.sendMedia(channel, outbound, attachment);
+        channelStore.saveMessage(sent);
+        log.info("Medien-Nachricht ({}) an '{}' gesendet.", attachment.kind(), channel.name());
+
+        pluginHooks.dispatch("message_sent",
+                Map.of("channelId", channel.id(), "sessionId", sessionId == null ? "" : sessionId,
+                        "threadId", threadId == null ? "" : threadId, "content", sanitizedCaption,
+                        "messageId", sent.id(), "mediaType", attachment.kind().name()));
         return sent;
     }
 
