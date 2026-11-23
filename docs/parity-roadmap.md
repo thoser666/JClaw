@@ -89,7 +89,7 @@ OpenClaw-Kernfeature: Nachrichten von/nach externen Plattformen.
 | P3-04 | Discord | Channel-Adapter (WebSocket) | ðŸŸ¡ | âœ… |
 | P3-05 | WhatsApp | Channel-Adapter (Cloud API) | ðŸŸ¡ | âœ… |
 | P3-06 | Weitere Channels | Buzz (Nostr) âœ…, ClickClack âœ…, IRC âœ…, Email âœ…, Mattermost âœ…, Google Chat âœ…, Synology Chat âœ…, Feishu âœ…, X âœ… u. a. | ðŸŸ¢ | âœ… |
-| P3-07 | Media-Message-Support | **Neu:** Spoken-Replies (TTS-Sprachnachrichten) in privaten Replies (Discord/Telegram, 2026.8.2) â€” Senden von Audio Ã¼ber den jeweiligen Adapter | ðŸŸ¢ | â¬œ |
+| P3-07 | Media-Message-Support | **Neu:** Spoken-Replies (TTS-Sprachnachrichten) in privaten Replies (Discord/Telegram, 2026.8.2) â€” Senden von Audio Ã¼ber den jeweiligen Adapter | ðŸŸ¢ **Umgesetzt (Slice 1):** ChannelMediaAdapter-Port, MediaAttachment-Modell, MultipartBody (JDK multipart/form-data), TelegramChannelAdapter (sendVoice/sendAudio/sendPhoto/sendDocument), DiscordChannelAdapter (Medien-Upload), ChannelService.sendMedia + message_sending/message_sent Hooks, REST POST /api/v1/channels/{id}/media (Base64). Spiegel-Test 1021-1044 gruen. | ✅ |
 | P3-08 | Ingress-Monitor-Abstraktion | Durable admission, polling, pruning, claim-identity validation, adoption handoff, shutdown (SDK-Vorbild, family-readiness) | ðŸŸ¢ | âœ… |
 
 ## Thema F â€” Browser, Computer Use & Talk (OpenClaw 2026.8.x)

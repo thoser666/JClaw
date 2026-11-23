@@ -591,6 +591,7 @@ Zusätzlich zur Agent-API stehen Gateway-Endpoints zur Verfügung:
 | `/api/v1/channels/{id}` | PUT | Channel aktualisieren |
 | `/api/v1/channels/{id}` | DELETE | Channel löschen |
 | `/api/v1/channels/{id}/send` | POST | Nachricht über Channel senden |
+| /api/v1/channels/{id}/media | POST | Medien-Nachricht (Audio/Bild/Dokument) über Channel senden |
 | `/api/v1/channels/{id}/inbound` | POST | Eingehende Nachricht verarbeiten |
 | `/api/v1/channels/{id}/bindings` | GET | Bindungen eines Channels auflisten |
 | `/api/v1/channels/{id}/bindings` | POST | Neue Bindung erstellen |
