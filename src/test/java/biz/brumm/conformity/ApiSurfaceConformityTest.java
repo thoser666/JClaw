@@ -98,6 +98,8 @@ class ApiSurfaceConformityTest {
             "GET /api/v1/backup",
             "POST /api/v1/backup/verify",
             "POST /api/v1/backup/restore",
+            "POST /api/v1/media/tts",
+            "POST /api/v1/media/stt",
             // VersionController (P4-16)
             "GET /api/version",
             // AuthRestController
